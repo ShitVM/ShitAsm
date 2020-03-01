@@ -15,7 +15,7 @@ endif()
 add_subdirectory(./ShitGen)
 link_libraries(ShitGen)
 
-include_directories("./include")
+include_directories("./include" "./ShitGen/include")
 file(GLOB_RECURSE SOURCE_LIST "./src/*.cpp")
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "./bin")
 
