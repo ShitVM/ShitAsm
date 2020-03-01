@@ -1,0 +1,3 @@
+[submodule "ShitGen"]
+	path = ShitGen
+	url = https://github.com/ShitVM/ShitGen.git
