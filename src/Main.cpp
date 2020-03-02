@@ -522,12 +522,9 @@ bool SecondPass(std::ifstream& stream, Identifiers& identifiers, Objects& object
 		}
 		case "ret"_h: objects.Builder->Ret(); break;
 
-		case "i2l"_h: objects.Builder->I2L(); break;
-		case "i2d"_h: objects.Builder->I2D(); break;
-		case "l2i"_h: objects.Builder->L2I(); break;
-		case "l2d"_h: objects.Builder->L2D(); break;
-		case "d2i"_h: objects.Builder->D2I(); break;
-		case "d2l"_h: objects.Builder->D2L(); break;
+		case "toi"_h: objects.Builder->ToI(); break;
+		case "tol"_h: objects.Builder->ToL(); break;
+		case "tod"_h: objects.Builder->ToD(); break;
 		}
 	}
 
