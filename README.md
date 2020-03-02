@@ -1,5 +1,5 @@
 # ShitAsm
-**ShitBC 어셈블러:** ShitBC 어셈블리를 ShitVM 바이트 파일로 만들어줍니다.
+ShitBC 어셈블러
 
 ## 컴파일
 ```
