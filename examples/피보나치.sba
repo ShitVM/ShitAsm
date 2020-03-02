@@ -1,0 +1,23 @@
+proc entrypoint:
+	push 35
+	call fibo
+
+func fibo(n):
+	load n
+	push 2
+	cmp
+	jae calc
+	pop
+	load n
+	ret
+calc:
+	load n
+	push 1
+	sub
+	call fibo
+	load n
+	push 2
+	sub
+	call fibo
+	add
+	ret

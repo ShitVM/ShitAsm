@@ -1,0 +1,26 @@
+proc entrypoint:
+	push 2147483647
+	call isprime
+
+func isprime(n):
+	push 2
+	store i
+compare:
+	load i
+	load n
+	cmp
+	jae true
+	pop
+	load n
+	load i
+	mod
+	jne increase
+	pop
+	push 0
+	ret
+increase:
+	inc
+	jmp compare
+true:
+	push 1
+	ret
