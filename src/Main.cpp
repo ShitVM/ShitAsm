@@ -107,9 +107,12 @@ constexpr std::uint32_t CRC32Table[] = {
 	0x54DE5729, 0x23D967BF, 0xB3667A2E, 0xC4614AB8, 0x5D681B02, 0x2A6F2B94,
 	0xB40BBE37, 0xC30C8EA1, 0x5A05DF1B, 0x2D02EF8D
 };
-constexpr std::uint32_t CRC32(const char* string, std::size_t index) noexcept {
-	return index == static_cast<std::uint32_t>(-1) ? 0xFFFFFFFF :
-		((CRC32(string, index - 1) >> 8) ^ CRC32Table[(CRC32(string, index - 1) ^ string[index]) & 0xFF]);
+constexpr std::uint32_t CRC32Internal(const char* string, std::size_t index) noexcept {
+	return index == static_cast<std::size_t>(-1) ? 0xFFFFFFFF :
+		((CRC32Internal(string, index - 1) >> 8) ^ CRC32Table[(CRC32Internal(string, index - 1) ^ string[index]) & 0xFF]);
+}
+constexpr std::uint32_t CRC32(const char* string, std::size_t length) noexcept {
+	return CRC32Internal(string, length) ^ 0xFFFFFFFF;
 }
 constexpr std::uint32_t operator""_h(const char* string, std::size_t length) noexcept {
 	return CRC32(string, length);
@@ -305,14 +308,11 @@ bool SecondPass(std::ifstream& stream, Identifiers& identifiers, Objects& object
 				}
 			} else {
 				const std::string name = identifiers.Labels[identifiers.CurrentFunction][labelInx++];
-				const LabelIndex lb = objects.Builder->AddLabel(name);
-				objects.Labels[identifiers.CurrentFunction][name] = lb;
+				objects.Builder->AddLabel(name);
 			}
 
 			continue;
 		}
-
-		constexpr auto c = CRC32("asdf", 4);
 
 		std::string mnemonic = ReadBeforeSpace(line);
 		std::transform(mnemonic.begin(), mnemonic.end(), mnemonic.begin(), [](char c) { return static_cast<char>(std::tolower(c)); });
