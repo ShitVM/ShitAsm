@@ -214,7 +214,7 @@ std::string ReadBefore(std::string& string, F function) {
 	return result;
 }
 std::string ReadBeforeSpace(std::string& string) {
-	return ReadBefore(string, std::isspace);
+	return ReadBefore(string, [](char c) -> bool { return std::isspace(c); });
 }
 std::string ReadBeforeChar(std::string& string, char c) {
 	return ReadBefore(string, [c](char ch) { return ch == c; });
