@@ -27,11 +27,11 @@ struct Identifiers {
 
 struct Objects {
 	::ByteFile ByteFile;
-	::Builder* Builder = nullptr;
 
 	std::unordered_map<std::string, FunctionIndex> Functions;
 	std::unordered_map<std::string, std::unordered_map<std::string, LabelIndex>> Labels;
 	std::unordered_map<std::string, std::unordered_map<std::string, LocalVariableIndex>> LocalVariables;
+	std::unordered_map<std::string, Builder*> Builders;
 };
 
 bool IsSpecial(char c) noexcept;
@@ -44,11 +44,11 @@ std::string ReadBeforeChar(std::string& string, char c);
 std::string ReadBeforeSpecialChar(std::string& string);
 std::vector<std::string> Split(const std::string& string, char c);
 
-bool FirstPass(std::ifstream& stream, Identifiers& identifiers);
+bool FirstPass(std::ifstream& stream, Identifiers& identifiers, Objects& objects);
 bool SecondPass(std::ifstream& stream, Identifiers& identifiers, Objects& objects);
 
-bool ParseProcOrFunc(std::string& line, bool isProc, std::size_t lineNum, Identifiers& identifiers);
-bool ParseLabel(std::string& line, std::size_t lineNum, Identifiers& identifiers);
+bool ParseProcOrFunc(std::string& line, bool isProc, std::size_t lineNum, Identifiers& identifiers, Objects& objects);
+bool ParseLabel(std::string& line, std::size_t lineNum, Identifiers& identifiers, Objects& objects);
 
 std::string ReadOperand(std::string& line, std::size_t lineNum);
 std::variant<std::monostate, std::uint32_t, std::uint64_t, double> ParseNumber(std::size_t lineNum, const std::string& op);
@@ -131,12 +131,14 @@ int main(int argc, char* argv[]) {
 	}
 
 	Identifiers identifiers;
-	if (!FirstPass(inputFile, identifiers)) return EXIT_FAILURE;
+	Objects objects;
+
+	if (!FirstPass(inputFile, identifiers, objects)) return EXIT_FAILURE;
+
 	inputFile.clear();
 	inputFile.seekg(0, std::ifstream::beg);
 	identifiers.CurrentFunction.clear();
 
-	Objects objects;
 	if (!SecondPass(inputFile, identifiers, objects)) return EXIT_FAILURE;
 
 	if (argc == 2) {
@@ -235,7 +237,7 @@ std::vector<std::string> Split(const std::string& string, char c) {
 	return result;
 }
 
-bool FirstPass(std::ifstream& stream, Identifiers& identifiers) {
+bool FirstPass(std::ifstream& stream, Identifiers& identifiers, Objects& objects) {
 	std::string line;
 	std::size_t lineNum = 0;
 	bool hasError = false;
@@ -253,11 +255,11 @@ bool FirstPass(std::ifstream& stream, Identifiers& identifiers) {
 
 			if (mnemonic == "proc" || mnemonic == "func") {
 				line = lineCopied;
-				if (!ParseProcOrFunc(line, lineNum, mnemonic == "proc", identifiers)) {
+				if (!ParseProcOrFunc(line, lineNum, mnemonic == "proc", identifiers, objects)) {
 					hasError = true;
 				}
 			} else {
-				if (!ParseLabel(line, lineNum, identifiers)) {
+				if (!ParseLabel(line, lineNum, identifiers, objects)) {
 					hasError = true;
 				}
 			}
@@ -278,6 +280,7 @@ bool SecondPass(std::ifstream& stream, Identifiers& identifiers, Objects& object
 			line.erase(line.begin() + commentBegin, line.end());
 		}
 		Trim(line);
+		if (line.empty()) continue;
 
 		if (line.find(':') != std::string::npos) {
 			std::string lineCopied = line;
@@ -286,29 +289,10 @@ bool SecondPass(std::ifstream& stream, Identifiers& identifiers, Objects& object
 
 			if (mnemonic == "proc" || mnemonic == "func") {
 				identifiers.CurrentFunction = identifiers.Functions[funcInx++];
-				if (objects.Builder) {
-					delete objects.Builder;
-				}
-
-				if (identifiers.CurrentFunction != "entrypoint") {
-					const FunctionIndex fn = objects.ByteFile.AddFunction(
-						static_cast<std::uint16_t>(identifiers.LocalVariables[identifiers.CurrentFunction].size()),
-						mnemonic == "func"
-					);
-					objects.Functions[identifiers.CurrentFunction] = fn;
-					objects.Builder = new Builder(objects.ByteFile, fn);
-				} else {
-					objects.Builder = new Builder(objects.ByteFile, objects.ByteFile.GetEntryPoint());
-				}
-
 				labelInx = 0;
-
-				for (const auto& label : identifiers.Labels[identifiers.CurrentFunction]) {
-					objects.Labels[identifiers.CurrentFunction][label] = objects.Builder->ReserveLabel(label);
-				}
 			} else {
 				const std::string name = identifiers.Labels[identifiers.CurrentFunction][labelInx++];
-				objects.Builder->AddLabel(name);
+				objects.Builders[identifiers.CurrentFunction]->AddLabel(name);
 			}
 
 			continue;
@@ -318,7 +302,7 @@ bool SecondPass(std::ifstream& stream, Identifiers& identifiers, Objects& object
 		std::transform(mnemonic.begin(), mnemonic.end(), mnemonic.begin(), [](char c) { return static_cast<char>(std::tolower(c)); });
 
 		switch (CRC32(mnemonic.c_str(), mnemonic.size())) {
-		case "nop"_h: objects.Builder->Nop(); break;
+		case "nop"_h: objects.Builders[identifiers.CurrentFunction]->Nop(); break;
 
 		case "push"_h: {
 			const std::string op = ReadOperand(line, lineNum);
@@ -333,18 +317,18 @@ bool SecondPass(std::ifstream& stream, Identifiers& identifiers, Objects& object
 				break;
 			} else if (std::holds_alternative<std::uint32_t>(val)) {
 				const auto inx = objects.ByteFile.AddIntConstant(std::get<std::uint32_t>(val));
-				objects.Builder->Push(inx);
+				objects.Builders[identifiers.CurrentFunction]->Push(inx);
 			} else if (std::holds_alternative<std::uint64_t>(val)) {
 				const auto inx = objects.ByteFile.AddLongConstant(std::get<std::uint64_t>(val));
-				objects.Builder->Push(inx);
+				objects.Builders[identifiers.CurrentFunction]->Push(inx);
 			} else if (std::holds_alternative<double>(val)) {
 				const auto inx = objects.ByteFile.AddDoubleConstant(std::get<double>(val));
-				objects.Builder->Push(inx);
+				objects.Builders[identifiers.CurrentFunction]->Push(inx);
 			}
 
 			break;
 		}
-		case "pop"_h: objects.Builder->Pop(); break;
+		case "pop"_h: objects.Builders[identifiers.CurrentFunction]->Pop(); break;
 		case "load"_h: {
 			const std::string op = ReadOperand(line, lineNum);
 			if (op.empty()) {
@@ -358,7 +342,7 @@ bool SecondPass(std::ifstream& stream, Identifiers& identifiers, Objects& object
 				break;
 			}
 
-			objects.Builder->Load(var.value());
+			objects.Builders[identifiers.CurrentFunction]->Load(var.value());
 			break;
 		}
 		case "store"_h: {
@@ -366,40 +350,60 @@ bool SecondPass(std::ifstream& stream, Identifiers& identifiers, Objects& object
 			if (op.empty()) break;
 			const auto var = GetLocalVariable(identifiers, objects, op);
 			if (var.has_value()) {
-				objects.Builder->Load(var.value());
+				objects.Builders[identifiers.CurrentFunction]->Store(var.value());
 			} else {
-				const LocalVariableIndex inx = objects.Builder->AddLocalVariable();
+				const LocalVariableIndex inx = objects.Builders[identifiers.CurrentFunction]->AddLocalVariable();
 				identifiers.LocalVariables[identifiers.CurrentFunction].push_back(op);
 				objects.LocalVariables[identifiers.CurrentFunction][op] = inx;
-				objects.Builder->Store(inx);
+				objects.Builders[identifiers.CurrentFunction]->Store(inx);
 			}
 
 			break;
 		}
+		case "lea"_h: {
+			const std::string op = ReadOperand(line, lineNum);
+			if (op.empty()) {
+				hasError = true;
+				break;
+			}
+			const auto var = GetLocalVariable(identifiers, objects, op);
+			if (!var.has_value()) {
+				std::cout << "Error: Line " << lineNum << ", Nonexistent local variable '" << op << "'.\n";
+				hasError = true;
+				break;
+			}
 
-		case "add"_h: objects.Builder->Add(); break;
-		case "sub"_h: objects.Builder->Sub(); break;
-		case "mul"_h: objects.Builder->Mul(); break;
-		case "imul"_h: objects.Builder->IMul(); break;
-		case "div"_h: objects.Builder->Div(); break;
-		case "idiv"_h: objects.Builder->IDiv(); break;
-		case "mod"_h: objects.Builder->Mod(); break;
-		case "imod"_h: objects.Builder->IMod(); break;
-		case "neg"_h: objects.Builder->Neg(); break;
-		case "inc"_h: objects.Builder->Inc(); break;
-		case "dec"_h: objects.Builder->Dec(); break;
+			objects.Builders[identifiers.CurrentFunction]->Lea(var.value());
+			break;
+		}
+		case "tload"_h: objects.Builders[identifiers.CurrentFunction]->TLoad(); break;
+		case "tstore"_h: objects.Builders[identifiers.CurrentFunction]->TStore(); break;
+		case "copy"_h: objects.Builders[identifiers.CurrentFunction]->Copy(); break;
+		case "swap"_h: objects.Builders[identifiers.CurrentFunction]->Swap(); break;
 
-		case "and"_h: objects.Builder->And(); break;
-		case "or"_h: objects.Builder->Or(); break;
-		case "xor"_h: objects.Builder->Xor(); break;
-		case "not"_h: objects.Builder->Not(); break;
-		case "shl"_h: objects.Builder->Shl(); break;
-		case "sal"_h: objects.Builder->Sal(); break;
-		case "shr"_h: objects.Builder->Shr(); break;
-		case "sar"_h: objects.Builder->Sar(); break;
+		case "add"_h: objects.Builders[identifiers.CurrentFunction]->Add(); break;
+		case "sub"_h: objects.Builders[identifiers.CurrentFunction]->Sub(); break;
+		case "mul"_h: objects.Builders[identifiers.CurrentFunction]->Mul(); break;
+		case "imul"_h: objects.Builders[identifiers.CurrentFunction]->IMul(); break;
+		case "div"_h: objects.Builders[identifiers.CurrentFunction]->Div(); break;
+		case "idiv"_h: objects.Builders[identifiers.CurrentFunction]->IDiv(); break;
+		case "mod"_h: objects.Builders[identifiers.CurrentFunction]->Mod(); break;
+		case "imod"_h: objects.Builders[identifiers.CurrentFunction]->IMod(); break;
+		case "neg"_h: objects.Builders[identifiers.CurrentFunction]->Neg(); break;
+		case "inc"_h: objects.Builders[identifiers.CurrentFunction]->Inc(); break;
+		case "dec"_h: objects.Builders[identifiers.CurrentFunction]->Dec(); break;
 
-		case "cmp"_h: objects.Builder->Cmp(); break;
-		case "icmp"_h: objects.Builder->ICmp(); break;
+		case "and"_h: objects.Builders[identifiers.CurrentFunction]->And(); break;
+		case "or"_h: objects.Builders[identifiers.CurrentFunction]->Or(); break;
+		case "xor"_h: objects.Builders[identifiers.CurrentFunction]->Xor(); break;
+		case "not"_h: objects.Builders[identifiers.CurrentFunction]->Not(); break;
+		case "shl"_h: objects.Builders[identifiers.CurrentFunction]->Shl(); break;
+		case "sal"_h: objects.Builders[identifiers.CurrentFunction]->Sal(); break;
+		case "shr"_h: objects.Builders[identifiers.CurrentFunction]->Shr(); break;
+		case "sar"_h: objects.Builders[identifiers.CurrentFunction]->Sar(); break;
+
+		case "cmp"_h: objects.Builders[identifiers.CurrentFunction]->Cmp(); break;
+		case "icmp"_h: objects.Builders[identifiers.CurrentFunction]->ICmp(); break;
 		case "jmp"_h: {
 			const std::string op = ReadOperand(line, lineNum);
 			if (op.empty()) {
@@ -412,7 +416,7 @@ bool SecondPass(std::ifstream& stream, Identifiers& identifiers, Objects& object
 				break;
 			}
 
-			objects.Builder->Jmp(label.value());
+			objects.Builders[identifiers.CurrentFunction]->Jmp(label.value());
 			break;
 		}
 		case "je"_h: {
@@ -427,7 +431,7 @@ bool SecondPass(std::ifstream& stream, Identifiers& identifiers, Objects& object
 				break;
 			}
 
-			objects.Builder->Je(label.value());
+			objects.Builders[identifiers.CurrentFunction]->Je(label.value());
 			break;
 		}
 		case "jne"_h: {
@@ -442,7 +446,7 @@ bool SecondPass(std::ifstream& stream, Identifiers& identifiers, Objects& object
 				break;
 			}
 
-			objects.Builder->Jne(label.value());
+			objects.Builders[identifiers.CurrentFunction]->Jne(label.value());
 			break;
 		}
 		case "ja"_h: {
@@ -457,7 +461,7 @@ bool SecondPass(std::ifstream& stream, Identifiers& identifiers, Objects& object
 				break;
 			}
 
-			objects.Builder->Ja(label.value());
+			objects.Builders[identifiers.CurrentFunction]->Ja(label.value());
 			break;
 		}
 		case "jae"_h: {
@@ -472,7 +476,7 @@ bool SecondPass(std::ifstream& stream, Identifiers& identifiers, Objects& object
 				break;
 			}
 
-			objects.Builder->Jae(label.value());
+			objects.Builders[identifiers.CurrentFunction]->Jae(label.value());
 			break;
 		}
 		case "jb"_h: {
@@ -487,7 +491,7 @@ bool SecondPass(std::ifstream& stream, Identifiers& identifiers, Objects& object
 				break;
 			}
 
-			objects.Builder->Jb(label.value());
+			objects.Builders[identifiers.CurrentFunction]->Jb(label.value());
 			break;
 		}
 		case "jbe"_h: {
@@ -502,7 +506,7 @@ bool SecondPass(std::ifstream& stream, Identifiers& identifiers, Objects& object
 				break;
 			}
 
-			objects.Builder->Jbe(label.value());
+			objects.Builders[identifiers.CurrentFunction]->Jbe(label.value());
 			break;
 		}
 		case "call"_h: {
@@ -517,35 +521,44 @@ bool SecondPass(std::ifstream& stream, Identifiers& identifiers, Objects& object
 				break;
 			}
 
-			objects.Builder->Call(func.value());
+			objects.Builders[identifiers.CurrentFunction]->Call(func.value());
 			break;
 		}
-		case "ret"_h: objects.Builder->Ret(); break;
+		case "ret"_h: objects.Builders[identifiers.CurrentFunction]->Ret(); break;
 
-		case "toi"_h: objects.Builder->ToI(); break;
-		case "tol"_h: objects.Builder->ToL(); break;
-		case "tod"_h: objects.Builder->ToD(); break;
+		case "toi"_h: objects.Builders[identifiers.CurrentFunction]->ToI(); break;
+		case "tol"_h: objects.Builders[identifiers.CurrentFunction]->ToL(); break;
+		case "tod"_h: objects.Builders[identifiers.CurrentFunction]->ToD(); break;
+		case "top"_h: objects.Builders[identifiers.CurrentFunction]->ToP(); break;
+
+		default: {
+			std::cout << "Error: Line " << lineNum << ", Unrecognized mnemonic '" << mnemonic << "'.\n";
+			hasError = true;
+			break;
+		}
 		}
 	}
 
 	return !hasError;
 }
 
-bool ParseProcOrFunc(std::string& line, bool isProc, std::size_t lineNum, Identifiers& identifiers) {
+bool ParseProcOrFunc(std::string& line, bool isProc, std::size_t lineNum, Identifiers& identifiers, Objects& objects) {
+	bool hasError = false;
+
 	std::string name = ReadBeforeSpecialChar(line);
 	Trim(name);
 
 	const auto funcIter = std::find(identifiers.Functions.begin(), identifiers.Functions.end(), name);
 	if (funcIter != identifiers.Functions.end()) {
 		std::cout << "Error: Line " << lineNum << ", Duplicated procedure or function name '" << name << "'.\n";
-		return false;
+		hasError = true;
 	}
 	identifiers.Functions.push_back(name);
 	identifiers.CurrentFunction = name;
 
 	if (name == "entrypoint" && !isProc) {
 		std::cout << "Error: Line " << lineNum << ", Invalid function name 'entrypoint'. It can be used only for procedure.";
-		return false;
+		hasError = true;
 	}
 
 	std::string rawParams = ReadBeforeChar(line, ':');
@@ -553,61 +566,74 @@ bool ParseProcOrFunc(std::string& line, bool isProc, std::size_t lineNum, Identi
 	if (!rawParams.empty()) {
 		if (rawParams.front() != '(') {
 			std::cout << "Error: Line " << lineNum << ", Excepted '(' before procedure or function name.\n";
-			return false;
+			hasError = true;
 		} else if (rawParams.back() != ')') {
 			std::cout << "Error: Line " << lineNum << ", Excepted ')' after procedure or function name.\n";
-			return false;
+			hasError = true;
+		} else {
+			rawParams.erase(rawParams.begin());
+			rawParams.erase(rawParams.end() - 1);
+
+			std::vector<std::string> params = Split(rawParams, ',');
+			std::vector<std::string> paramsSorted = params;
+			std::sort(paramsSorted.begin(), paramsSorted.end());
+			if (const auto dp = std::unique(paramsSorted.begin(), paramsSorted.end()); dp != paramsSorted.end()) {
+				std::cout << "Error: Line " << lineNum << ", Duplicated parameter name '" << *dp << "'.\n";
+				hasError = true;
+			}
+
+			identifiers.LocalVariables[name] = std::move(params);
 		}
-
-		rawParams.erase(rawParams.begin());
-		rawParams.erase(rawParams.end() - 1);
-
-		std::vector<std::string> params = Split(rawParams, ',');
-		std::vector<std::string> paramsSorted = params;
-		std::sort(paramsSorted.begin(), paramsSorted.end());
-		if (const auto dp = std::unique(paramsSorted.begin(), paramsSorted.end()); dp != paramsSorted.end()) {
-			std::cout << "Error: Line " << lineNum << ", Duplicated parameter name '" << *dp << "'.\n";
-			return false;
-		}
-
-		identifiers.LocalVariables[name] = std::move(params);
 	}
 
 	if (line.front() != ':') {
 		std::cout << "Error: Line " << lineNum << ", Excepted ':' after parameters.\n";
-		return false;
+		hasError = true;
 	} else if (line.size() != 1) {
 		std::cout << "Error: Line " << lineNum << ", Unexcepted characters after ':'.\n";
-		return false;
+		hasError = true;
 	}
 
-	return true;
+	if (name == "entrypoint") {
+		objects.Builders[name] = new Builder(objects.ByteFile, objects.ByteFile.GetEntryPoint());
+	} else {
+		const auto func = objects.ByteFile.AddFunction(static_cast<std::uint16_t>(identifiers.LocalVariables[name].size()), !isProc);
+		objects.Functions[name] = func;
+		objects.Builders[name] = new Builder(objects.ByteFile, func);
+	}
+
+	return !hasError;
 }
-bool ParseLabel(std::string& line, std::size_t lineNum, Identifiers& identifiers) {
+bool ParseLabel(std::string& line, std::size_t lineNum, Identifiers& identifiers, Objects& objects) {
 	if (identifiers.CurrentFunction.empty()) {
 		std::cout << "Error: Line " << lineNum << ", Not belonged label.\n";
 		return false;
 	}
+
+	bool hasError = false;
 
 	std::string name = ReadBeforeSpecialChar(line);
 
 	const auto labelIter = std::find(identifiers.Labels[identifiers.CurrentFunction].begin(), identifiers.Labels[identifiers.CurrentFunction].end(), name);
 	if (labelIter != identifiers.Labels[identifiers.CurrentFunction].end()) {
 		std::cout << "Error: Line " << lineNum << ", Duplicated label name '" << name << "'.\n";
-		return false;
+		hasError = true;
 	}
 
 	identifiers.Labels[identifiers.CurrentFunction].push_back(name);
+	
+	const auto label = objects.Builders[identifiers.CurrentFunction]->ReserveLabel(name);
+	objects.Labels[identifiers.CurrentFunction][name] = label;
 
 	if (line.front() != ':') {
 		std::cout << "Error: Line " << lineNum << ", Excepted ':' after label name.\n";
-		return false;
+		hasError = true;
 	} else if (line.size() != 1) {
 		std::cout << "Error: Line " << lineNum << ", Unexcepted characters after ':'.\n";
-		return false;
+		hasError = true;
 	}
 
-	return true;
+	return !hasError;
 }
 
 std::string ReadOperand(std::string& line, std::size_t lineNum) {
