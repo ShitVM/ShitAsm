@@ -1031,7 +1031,7 @@ std::variant<std::monostate, std::uint32_t, std::uint64_t, double> ParseHex(std:
 std::optional<FieldIndex> GetField(std::size_t lineNum, Identifiers& identifiers, Objects& objects, const std::string& operand) {
 	const std::size_t dotOffset = operand.find('.');
 
-	if (dotOffset != std::string::npos) {
+	if (dotOffset == std::string::npos) {
 		std::cout << "Error: Line " << lineNum << ", Invalid field name '" << operand << "'.\n";
 		return std::nullopt;
 	}
@@ -1050,7 +1050,7 @@ std::optional<FieldIndex> GetField(std::size_t lineNum, Identifiers& identifiers
 	}
 
 	const auto fieldIter = std::find(identifiers.Fields[structName].begin(), identifiers.Fields[structName].end(), fieldName);
-	if (fieldIter != identifiers.Fields[structName].end()) {
+	if (fieldIter == identifiers.Fields[structName].end()) {
 		std::cout << "Error: Line " << lineNum << ", Nonexistent field name '" << operand << "'.\n";
 		return std::nullopt;
 	}

@@ -249,6 +249,8 @@ struct Grade:
 
 proc entrypoint:
 	push Grade
+	store grade
+	lea grade
 	flea Grade.korean
 	push 10
 	tstore
