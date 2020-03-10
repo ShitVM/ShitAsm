@@ -19,6 +19,7 @@ compare:
 	push 0
 	ret
 increase:
+	lea i
 	inc
 	jmp compare
 true:
