@@ -22,6 +22,10 @@ struct Identifiers {
 	std::unordered_map<std::string, std::vector<std::string>> Labels;
 	std::unordered_map<std::string, std::vector<std::string>> LocalVariables;
 
+	std::vector<std::string> Structures;
+	std::unordered_map<std::string, std::vector<std::string>> Fields;
+
+	std::string CurrentStructure;
 	std::string CurrentFunction;
 };
 
@@ -31,6 +35,10 @@ struct Objects {
 	std::unordered_map<std::string, FunctionIndex> Functions;
 	std::unordered_map<std::string, std::unordered_map<std::string, LabelIndex>> Labels;
 	std::unordered_map<std::string, std::unordered_map<std::string, LocalVariableIndex>> LocalVariables;
+
+	std::unordered_map<std::string, StructureIndex> Structures;
+	std::unordered_map<std::string, std::unordered_map<std::string, FieldIndex>> Fields;
+
 	std::unordered_map<std::string, Builder*> Builders;
 };
 
@@ -46,9 +54,11 @@ std::vector<std::string> Split(const std::string& string, char c);
 
 bool FirstPass(std::ifstream& stream, Identifiers& identifiers, Objects& objects);
 bool SecondPass(std::ifstream& stream, Identifiers& identifiers, Objects& objects);
+bool ThirdPass(std::ifstream& stream, Identifiers& identifiers, Objects& objects);
 
 bool ParseProcOrFunc(std::string& line, bool isProc, std::size_t lineNum, Identifiers& identifiers, Objects& objects);
 bool ParseLabel(std::string& line, std::size_t lineNum, Identifiers& identifiers, Objects& objects);
+bool ParseStruct(std::string& line, std::size_t lineNum, Identifiers& identifers, Objects& objects);
 
 std::string ReadOperand(std::string& line, std::size_t lineNum);
 std::variant<std::monostate, std::uint32_t, std::uint64_t, double> ParseNumber(std::size_t lineNum, const std::string& op);
@@ -58,6 +68,7 @@ std::variant<std::monostate, std::uint32_t, std::uint64_t, double> ParseBin(std:
 std::variant<std::monostate, std::uint32_t, std::uint64_t, double> ParseOct(std::size_t lineNum, const std::string& op, std::string& opMut);
 std::variant<std::monostate, std::uint32_t, std::uint64_t, double> ParseHex(std::size_t lineNum, const std::string& op, std::string& opMut);
 
+std::optional<FieldIndex> GetField(std::size_t lineNum, Identifiers& identifiers, Objects& objects, const std::string& operand);
 std::optional<FunctionIndex> GetFunction(std::size_t lineNum, Identifiers& identifiers, Objects& objects, const std::string& operand);
 std::optional<LabelIndex> GetLabel(std::size_t lineNum, Identifiers& identifiers, Objects& objects, const std::string& operand);
 std::optional<LocalVariableIndex> GetLocalVariable(Identifiers& identifiers, Objects& objects, const std::string& operand);
@@ -137,9 +148,13 @@ int main(int argc, char* argv[]) {
 
 	inputFile.clear();
 	inputFile.seekg(0, std::ifstream::beg);
-	identifiers.CurrentFunction.clear();
 
 	if (!SecondPass(inputFile, identifiers, objects)) return EXIT_FAILURE;
+
+	inputFile.clear();
+	inputFile.seekg(0, std::ifstream::beg);
+
+	if (!ThirdPass(inputFile, identifiers, objects)) return EXIT_FAILURE;
 
 	if (argc == 2) {
 		objects.ByteFile.Save("./ShitAsmOutput.sbf");
@@ -247,6 +262,7 @@ bool FirstPass(std::ifstream& stream, Identifiers& identifiers, Objects& objects
 			line.erase(line.begin() + commentBegin, line.end());
 		}
 		Trim(line);
+		if (line.empty()) continue;
 
 		if (line.find(':') != std::string::npos) {
 			std::string lineCopied = line;
@@ -256,6 +272,11 @@ bool FirstPass(std::ifstream& stream, Identifiers& identifiers, Objects& objects
 			if (mnemonic == "proc" || mnemonic == "func") {
 				line = lineCopied;
 				if (!ParseProcOrFunc(line, lineNum, mnemonic == "proc", identifiers, objects)) {
+					hasError = true;
+				}
+			} else if (mnemonic == "struct") {
+				line = lineCopied;
+				if (!ParseStruct(line, lineNum, identifiers, objects)) {
 					hasError = true;
 				}
 			} else {
@@ -271,9 +292,11 @@ bool FirstPass(std::ifstream& stream, Identifiers& identifiers, Objects& objects
 bool SecondPass(std::ifstream& stream, Identifiers& identifiers, Objects& objects) {
 	std::string line;
 	std::size_t lineNum = 0;
-	std::size_t funcInx = 0;
-	std::size_t labelInx = 0;
+	std::size_t structInx = 0, fieldInx = 0;
 	bool hasError = false;
+
+	identifiers.CurrentStructure.clear();
+	identifiers.CurrentFunction.clear();
 
 	while (std::getline(stream, line) && ++lineNum) {
 		if (const auto commentBegin = line.find(';'); commentBegin != std::string::npos) {
@@ -288,15 +311,127 @@ bool SecondPass(std::ifstream& stream, Identifiers& identifiers, Objects& object
 			std::transform(mnemonic.begin(), mnemonic.end(), mnemonic.begin(), [](char c) { return static_cast<char>(std::tolower(c)); });
 
 			if (mnemonic == "proc" || mnemonic == "func") {
+				identifiers.CurrentStructure.clear();
+			} else if (mnemonic == "struct") {
+				identifiers.CurrentStructure = identifiers.Structures[structInx++];
+				fieldInx = 0;
+			}
+
+			continue;
+		} else if (identifiers.CurrentStructure.empty()) continue;
+
+		Structure* structure = objects.ByteFile.GetStructure(objects.Structures[identifiers.CurrentStructure]);
+
+		static const std::unordered_map<std::uint32_t, const Type*> fundamental = {
+			{ "int"_h, IntType },
+			{ "long"_h, LongType },
+			{ "double"_h, DoubleType },
+			{ "pointer"_h, PointerType },
+		};
+
+		const std::string mnemonic = ReadBeforeSpace(line);
+		const std::uint32_t mnemonicHash = CRC32(mnemonic.c_str(), mnemonic.size());
+		if (const auto iter = fundamental.find(mnemonicHash); iter != fundamental.end()) {
+			const std::string op = ReadOperand(line, lineNum);
+			if (op.empty()) {
+				hasError = true;
+				break;
+			} else if (objects.Fields.find(op) != objects.Fields.end()) {
+				std::cout << "Error: Line " << lineNum << ", Duplicated field name '" << op << "'.\n";
+				hasError = true;
+				break;
+			} else if (std::isdigit(op.front())) {
+				std::cout << "Error: Line " << lineNum << ", Invalid field name '" << op << "'.\n";
+				hasError = true;
+				break;
+			}
+			for (const char c : op) {
+				if (IsSpecial(c)) {
+					std::cout << "Error: Line " << lineNum << ", Invalid field name '" << op << "'.\n";
+					hasError = true;
+					goto out1;
+				}
+			}
+
+			identifiers.Fields[identifiers.CurrentStructure].push_back(op);
+			objects.Fields[identifiers.CurrentStructure][op] = structure->AddField(iter->second);
+
+		out1:
+			continue;
+		}
+
+		if (const auto iter = std::find(identifiers.Structures.begin(), identifiers.Structures.end(), mnemonic);
+			iter != identifiers.Structures.end()) {
+			const std::string op = ReadOperand(line, lineNum);
+			if (op.empty()) {
+				hasError = true;
+				break;
+			} else if (objects.Fields.find(op) != objects.Fields.end()) {
+				std::cout << "Error: Line " << lineNum << ", Duplicated field name '" << op << "'.\n";
+				hasError = true;
+				break;
+			} else if (std::isdigit(op.front())) {
+				std::cout << "Error: Line " << lineNum << ", Invalid field name '" << op << "'.\n";
+				hasError = true;
+				break;
+			}
+			for (const char c : op) {
+				if (IsSpecial(c)) {
+					std::cout << "Error: Line " << lineNum << ", Invalid field name '" << op << "'.\n";
+					hasError = true;
+					goto out2;
+				}
+			}
+
+			identifiers.Fields[identifiers.CurrentStructure].push_back(op);
+			objects.Fields[identifiers.CurrentStructure][op] = structure->AddField(objects.ByteFile.GetStructure(objects.Structures[*iter])->GetType());
+
+		out2:
+			continue;
+		} else {
+			std::cout << "Error: Line " << lineNum << ", Nonexistent type name '" << mnemonic << "'.\n";
+			hasError = true;
+		}
+	}
+
+	return !hasError;
+}
+bool ThirdPass(std::ifstream& stream, Identifiers& identifiers, Objects& objects) {
+	std::string line;
+	std::size_t lineNum = 0;
+	std::size_t funcInx = 0, labelInx = 0;
+	std::size_t structInx = 0, fieldInx = 0;
+	bool hasError = false;
+
+	identifiers.CurrentStructure.clear();
+
+	while (std::getline(stream, line) && ++lineNum) {
+		if (const auto commentBegin = line.find(';'); commentBegin != std::string::npos) {
+			line.erase(line.begin() + commentBegin, line.end());
+		}
+		Trim(line);
+		if (line.empty()) continue;
+
+		if (line.find(':') != std::string::npos) {
+			std::string lineCopied = line;
+			std::string mnemonic = ReadBeforeSpace(lineCopied);
+			std::transform(mnemonic.begin(), mnemonic.end(), mnemonic.begin(), [](char c) { return static_cast<char>(std::tolower(c)); });
+
+			if (mnemonic == "proc" || mnemonic == "func") {
+				identifiers.CurrentStructure.clear();
 				identifiers.CurrentFunction = identifiers.Functions[funcInx++];
 				labelInx = 0;
+			} else if (mnemonic == "struct") {
+				identifiers.CurrentStructure = identifiers.Structures[structInx++];
+				identifiers.CurrentFunction.clear();
+				fieldInx = 0;
 			} else {
 				const std::string name = identifiers.Labels[identifiers.CurrentFunction][labelInx++];
 				objects.Builders[identifiers.CurrentFunction]->AddLabel(name);
 			}
 
 			continue;
-		}
+		} else if (!identifiers.CurrentStructure.empty()) continue;
 
 		std::string mnemonic = ReadBeforeSpace(line);
 		std::transform(mnemonic.begin(), mnemonic.end(), mnemonic.begin(), [](char c) { return static_cast<char>(std::tolower(c)); });
@@ -310,20 +445,29 @@ bool SecondPass(std::ifstream& stream, Identifiers& identifiers, Objects& object
 				hasError = true;
 				break;
 			}
-			const auto val = ParseNumber(lineNum, op);
 
-			if (std::holds_alternative<std::monostate>(val)) {
-				hasError = true;
-				break;
-			} else if (std::holds_alternative<std::uint32_t>(val)) {
-				const auto inx = objects.ByteFile.AddIntConstant(std::get<std::uint32_t>(val));
-				objects.Builders[identifiers.CurrentFunction]->Push(inx);
-			} else if (std::holds_alternative<std::uint64_t>(val)) {
-				const auto inx = objects.ByteFile.AddLongConstant(std::get<std::uint64_t>(val));
-				objects.Builders[identifiers.CurrentFunction]->Push(inx);
-			} else if (std::holds_alternative<double>(val)) {
-				const auto inx = objects.ByteFile.AddDoubleConstant(std::get<double>(val));
-				objects.Builders[identifiers.CurrentFunction]->Push(inx);
+			if (op.front() == '+' || op.front() == '-' || std::isdigit(op.front())) {
+				const auto val = ParseNumber(lineNum, op);
+				if (std::holds_alternative<std::monostate>(val)) {
+					hasError = true;
+				} else if (std::holds_alternative<std::uint32_t>(val)) {
+					const auto inx = objects.ByteFile.AddIntConstant(std::get<std::uint32_t>(val));
+					objects.Builders[identifiers.CurrentFunction]->Push(inx);
+				} else if (std::holds_alternative<std::uint64_t>(val)) {
+					const auto inx = objects.ByteFile.AddLongConstant(std::get<std::uint64_t>(val));
+					objects.Builders[identifiers.CurrentFunction]->Push(inx);
+				} else if (std::holds_alternative<double>(val)) {
+					const auto inx = objects.ByteFile.AddDoubleConstant(std::get<double>(val));
+					objects.Builders[identifiers.CurrentFunction]->Push(inx);
+				}
+			} else {
+				const auto structure = objects.Structures.find(op);
+				if (structure == objects.Structures.end()) {
+					std::cout << "Error: Line " << lineNum << ", Nonexistent structure name '" << op << "'.\n";
+					hasError = true;
+				} else {
+					objects.Builders[identifiers.CurrentFunction]->Push(structure->second);
+				}
 			}
 
 			break;
@@ -374,6 +518,21 @@ bool SecondPass(std::ifstream& stream, Identifiers& identifiers, Objects& object
 			}
 
 			objects.Builders[identifiers.CurrentFunction]->Lea(var.value());
+			break;
+		}
+		case "flea"_h: {
+			const std::string op = ReadOperand(line, lineNum);
+			if (op.empty()) {
+				hasError = true;
+				break;
+			}
+			const auto field = GetField(lineNum, identifiers, objects, op);
+			if (!field.has_value()) {
+				hasError = true;
+				break;
+			}
+
+			objects.Builders[identifiers.CurrentFunction]->FLea(field.value());
 			break;
 		}
 		case "tload"_h: objects.Builders[identifiers.CurrentFunction]->TLoad(); break;
@@ -548,11 +707,24 @@ bool ParseProcOrFunc(std::string& line, bool isProc, std::size_t lineNum, Identi
 	std::string name = ReadBeforeSpecialChar(line);
 	Trim(name);
 
+	if (std::isdigit(name.front())) {
+		std::cout << "Error: Line " << lineNum << ", Invalid procedure or function name '" << name << "'.\n";
+		hasError = true;
+	}
+	for (const char c : name) {
+		if (std::isspace(c)) {
+			std::cout << "Error: Line " << lineNum << ", Invalid procedure or function name '" << name << "'.\n";
+			hasError = true;
+			break;
+		}
+	}
+
 	const auto funcIter = std::find(identifiers.Functions.begin(), identifiers.Functions.end(), name);
 	if (funcIter != identifiers.Functions.end()) {
 		std::cout << "Error: Line " << lineNum << ", Duplicated procedure or function name '" << name << "'.\n";
 		hasError = true;
 	}
+	identifiers.CurrentStructure.clear();
 	identifiers.Functions.push_back(name);
 	identifiers.CurrentFunction = name;
 
@@ -613,6 +785,19 @@ bool ParseLabel(std::string& line, std::size_t lineNum, Identifiers& identifiers
 	bool hasError = false;
 
 	std::string name = ReadBeforeSpecialChar(line);
+	Trim(name);
+
+	if (std::isdigit(name.front())) {
+		std::cout << "Error: Line " << lineNum << ", Invalid label name '" << name << "'.\n";
+		hasError = true;
+	}
+	for (const char c : name) {
+		if (std::isspace(c)) {
+			std::cout << "Error: Line " << lineNum << ", Invalid procedure or function name '" << name << "'.\n";
+			hasError = true;
+			break;
+		}
+	}
 
 	const auto labelIter = std::find(identifiers.Labels[identifiers.CurrentFunction].begin(), identifiers.Labels[identifiers.CurrentFunction].end(), name);
 	if (labelIter != identifiers.Labels[identifiers.CurrentFunction].end()) {
@@ -621,7 +806,7 @@ bool ParseLabel(std::string& line, std::size_t lineNum, Identifiers& identifiers
 	}
 
 	identifiers.Labels[identifiers.CurrentFunction].push_back(name);
-	
+
 	const auto label = objects.Builders[identifiers.CurrentFunction]->ReserveLabel(name);
 	objects.Labels[identifiers.CurrentFunction][name] = label;
 
@@ -633,6 +818,44 @@ bool ParseLabel(std::string& line, std::size_t lineNum, Identifiers& identifiers
 		hasError = true;
 	}
 
+	return !hasError;
+}
+bool ParseStruct(std::string& line, std::size_t lineNum, Identifiers& identifiers, Objects& objects) {
+	bool hasError = false;
+
+	std::string name = ReadBeforeSpecialChar(line);
+	Trim(name);
+
+	if (std::isdigit(name.front())) {
+		std::cout << "Error: Line " << lineNum << ", Invalid structure name '" << name << "'.\n";
+		hasError = true;
+	}
+	for (const char c : name) {
+		if (std::isspace(c)) {
+			std::cout << "Error: Line " << lineNum << ", Invalid procedure or function name '" << name << "'.\n";
+			hasError = true;
+			break;
+		}
+	}
+
+	const auto structIter = std::find(identifiers.Structures.begin(), identifiers.Structures.end(), name);
+	if (structIter != identifiers.Structures.end()) {
+		std::cout << "Error: Line " << lineNum << ", Duplicated structure name '" << name << "'.\n";
+		hasError = true;
+	}
+	identifiers.Structures.push_back(name);
+	identifiers.CurrentStructure = name;
+	identifiers.CurrentFunction.clear();
+
+	if (line.front() != ':') {
+		std::cout << "Error: Line " << lineNum << ", Excepted ':' after structure name.\n";
+		hasError = true;
+	} else if (line.size() != 1) {
+		std::cout << "Error: Line " << lineNum << ", Unexcepted characters after ':'.\n";
+		hasError = true;
+	}
+
+	objects.Structures[name] = objects.ByteFile.AddStructure();
 	return !hasError;
 }
 
@@ -805,6 +1028,35 @@ std::variant<std::monostate, std::uint32_t, std::uint64_t, double> ParseHex(std:
 		}, 16);
 }
 
+std::optional<FieldIndex> GetField(std::size_t lineNum, Identifiers& identifiers, Objects& objects, const std::string& operand) {
+	const std::size_t dotOffset = operand.find('.');
+
+	if (dotOffset != std::string::npos) {
+		std::cout << "Error: Line " << lineNum << ", Invalid field name '" << operand << "'.\n";
+		return std::nullopt;
+	}
+
+	const std::string structName = operand.substr(0, dotOffset);
+	const auto structIter = std::find(identifiers.Structures.begin(), identifiers.Structures.end(), structName);
+	if (structIter == identifiers.Structures.end()) {
+		std::cout << "Error: Line " << lineNum << ", Nonexistent structure name '" << structName << "'.\n";
+		return std::nullopt;
+	}
+
+	const std::string fieldName = operand.substr(dotOffset + 1);
+	if (fieldName.empty()) {
+		std::cout << "Error: Line " << lineNum << ", Invalid field name '" << operand << "'.\n";
+		return std::nullopt;
+	}
+
+	const auto fieldIter = std::find(identifiers.Fields[structName].begin(), identifiers.Fields[structName].end(), fieldName);
+	if (fieldIter != identifiers.Fields[structName].end()) {
+		std::cout << "Error: Line " << lineNum << ", Nonexistent field name '" << operand << "'.\n";
+		return std::nullopt;
+	}
+
+	return objects.Fields[structName][*fieldIter];
+}
 std::optional<FunctionIndex> GetFunction(std::size_t lineNum, Identifiers& identifiers, Objects& objects, const std::string& operand) {
 	const auto funcIter = std::find(identifiers.Functions.begin(), identifiers.Functions.end(), operand);
 	if (funcIter == identifiers.Functions.end()) {
