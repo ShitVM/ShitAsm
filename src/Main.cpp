@@ -271,7 +271,7 @@ bool FirstPass(std::ifstream& stream, Identifiers& identifiers, Objects& objects
 
 			if (mnemonic == "proc" || mnemonic == "func") {
 				line = lineCopied;
-				if (!ParseProcOrFunc(line, lineNum, mnemonic == "proc", identifiers, objects)) {
+				if (!ParseProcOrFunc(line, mnemonic == "proc", lineNum, identifiers, objects)) {
 					hasError = true;
 				}
 			} else if (mnemonic == "struct") {
@@ -772,6 +772,12 @@ bool ParseProcOrFunc(std::string& line, bool isProc, std::size_t lineNum, Identi
 		const auto func = objects.ByteFile.AddFunction(static_cast<std::uint16_t>(identifiers.LocalVariables[name].size()), !isProc);
 		objects.Functions[name] = func;
 		objects.Builders[name] = new Builder(objects.ByteFile, func);
+	}
+
+	std::uint32_t i = 0;
+	for (const auto& param : identifiers.LocalVariables[identifiers.CurrentFunction]) {
+		objects.LocalVariables[identifiers.CurrentFunction][param] = objects.Builders[identifiers.CurrentFunction]->GetArgument(i);
+		++i;
 	}
 
 	return !hasError;
