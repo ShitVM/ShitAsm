@@ -1,0 +1,243 @@
+struct Vector2:
+	double first
+	double second
+
+func vectorDot(a, b):								; a: Vector2, b: Vector2
+	; P = a.first * b.first
+	lea a
+	flea Vector2.first
+	tload
+	lea b
+	flea Vector2.first
+	tload
+	mul
+	; Q = a.second * b.second
+	lea a
+	flea Vector2.second
+	tload
+	lea b
+	flea Vector2.second
+	tload
+	mul
+	; P + Q
+	add
+	ret
+
+struct Perceptron:
+	Vector2 weight
+	double bias
+
+	double weightedSum
+
+func evalPerceptron(p, input):						; p: Perceptron*, input: Vector2
+	; P = p.Weight * input
+	load input
+	load p
+	flea Perceptron.weight
+	tload
+	call vectorDot
+	store P
+	load p
+	flea Perceptron.weightedSum
+	load P
+	tstore
+	
+	; Q = activation(P)
+	load P
+	call activation
+	ret
+
+func activation(v):									; v: double
+	; y = x
+	load v
+	ret
+
+func dactivation(v):								; v: double
+	; y' = 1
+	push 1.0
+	ret
+
+proc trainPerceptron(p, alpha, input, output):		; p: Perceptron*, alpha: double, input: Vector2, output: double
+	; y = f(x)
+	load input
+	load p
+	call evalPerceptron
+	; e = y - output
+	load output
+	sub
+	; d = dactivation(p->weightedSum) * e * alpha
+	load p
+	flea Perceptron.weightedSum
+	tload
+	call dactivation
+	mul
+	load alpha
+	mul
+	store d
+
+	load p
+	flea Perceptron.weight
+	flea Vector2.first
+	tload
+	lea input
+	flea Vector2.first
+	tload
+	load d
+	mul
+	sub
+	store q
+	load p
+	flea Perceptron.weight
+	flea Vector2.first
+	load q
+	tstore
+
+	load p
+	flea Perceptron.weight
+	flea Vector2.second
+	tload
+	lea input
+	flea Vector2.second
+	tload
+	load d
+	mul
+	sub
+	store q
+	load p
+	flea Perceptron.weight
+	flea Vector2.second
+	load q
+	tstore
+
+	load p
+	flea Perceptron.bias
+	tload
+	load d
+	sub
+	store q
+	load p
+	flea Perceptron.bias
+	load q
+	tstore
+
+	ret
+
+proc entrypoint:
+	push Perceptron
+	store p
+	lea p
+	copy
+	flea Perceptron.weight
+	copy
+	flea Vector2.first
+	push 0.3
+	tstore
+	flea Vector2.second
+	push -0.3
+	tstore
+	flea Perceptron.bias
+	push 0.9
+	tstore
+
+	; { 0, 0 } -> 0
+	push Vector2
+	store input0
+	lea input0
+	copy
+	flea Vector2.first
+	push 0.0					; Input[0][0]
+	tstore
+	flea Vector2.second
+	push 0.0					; Input[0][1]
+	tstore
+	push 0.0					; Output[0]
+	store output0
+
+	; { 1, 0 } -> 1
+	push Vector2
+	store input1
+	lea input1
+	copy
+	flea Vector2.first
+	push 1.0					; Input[1][0]
+	tstore
+	flea Vector2.second
+	push 0.0					; Input[1][1]
+	tstore
+	push 1.0					; Output[1]
+	store output1
+
+	; { 0, 1 } -> 1
+	push Vector2
+	store input2
+	lea input2
+	copy
+	flea Vector2.first
+	push 0.0					; Input[2][0]
+	tstore
+	flea Vector2.second
+	push 1.0					; Input[2][1]
+	tstore
+	push 1.0					; Output[2]
+	store output2
+
+	; { 1, 1 } -> 1
+	push Vector2
+	store input3
+	lea input3
+	copy
+	flea Vector2.first
+	push 1.0					; Input[3][0]
+	tstore
+	flea Vector2.second
+	push 1.0					; Input[3][1]
+	tstore
+	push 1.0					; Output[3]
+	store output3
+
+	push 0.2					; Learning-rate
+	store alpha
+
+	push 1
+	store i
+train:
+	load i
+	push 10000
+	cmp
+	jae eval
+	load output0
+	load input0
+	load alpha
+	lea p
+	call trainPerceptron
+	load output1
+	load input1
+	load alpha
+	lea p
+	call trainPerceptron
+	load output2
+	load input2
+	load alpha
+	lea p
+	call trainPerceptron
+	load output3
+	load input3
+	load alpha
+	lea p
+	call trainPerceptron
+	lea i
+	inc
+	jmp train
+eval:
+	load input0
+	lea p
+	call evalPerceptron
+	load input1
+	lea p
+	call evalPerceptron
+	load input2
+	lea p
+	call evalPerceptron
+	load input3
+	lea p
+	call evalPerceptron
