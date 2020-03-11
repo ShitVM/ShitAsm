@@ -36,6 +36,10 @@ func evalPerceptron(p, input):						; p: Perceptron*, input: Vector2
 	flea Perceptron.weight
 	tload
 	call vectorDot
+	load p
+	flea Perceptron.bias
+	tload
+	add
 	store P
 	load p
 	flea Perceptron.weightedSum
