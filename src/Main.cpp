@@ -68,6 +68,7 @@ std::variant<std::monostate, std::uint32_t, std::uint64_t, double> ParseBin(std:
 std::variant<std::monostate, std::uint32_t, std::uint64_t, double> ParseOct(std::size_t lineNum, const std::string& op, std::string& opMut);
 std::variant<std::monostate, std::uint32_t, std::uint64_t, double> ParseHex(std::size_t lineNum, const std::string& op, std::string& opMut);
 
+std::optional<TypeIndex> GetType(std::size_t lineNum, Identifiers& identifiers, Objects& objects, const std::string& operand);
 std::optional<FieldIndex> GetField(std::size_t lineNum, Identifiers& identifiers, Objects& objects, const std::string& operand);
 std::optional<FunctionIndex> GetFunction(std::size_t lineNum, Identifiers& identifiers, Objects& objects, const std::string& operand);
 std::optional<LabelIndex> GetLabel(std::size_t lineNum, Identifiers& identifiers, Objects& objects, const std::string& operand);
@@ -690,6 +691,24 @@ bool ThirdPass(std::ifstream& stream, Identifiers& identifiers, Objects& objects
 		case "tod"_h: objects.Builders[identifiers.CurrentFunction]->ToD(); break;
 		case "top"_h: objects.Builders[identifiers.CurrentFunction]->ToP(); break;
 
+		case "null"_h: objects.Builders[identifiers.CurrentFunction]->Null(); break;
+		case "new"_h: {
+			const std::string op = ReadOperand(line, lineNum);
+			if (op.empty()) {
+				hasError = true;
+				break;
+			}
+			const auto type = GetType(lineNum, identifiers, objects, op);
+			if (!type.has_value()) {
+				hasError = true;
+				break;
+			}
+
+			objects.Builders[identifiers.CurrentFunction]->New(type.value());
+			break;
+		}
+		case "delete"_h: objects.Builders[identifiers.CurrentFunction]->Delete(); break;
+
 		default: {
 			std::cout << "Error: Line " << lineNum << ", Unrecognized mnemonic '" << mnemonic << "'.\n";
 			hasError = true;
@@ -1034,6 +1053,22 @@ std::variant<std::monostate, std::uint32_t, std::uint64_t, double> ParseHex(std:
 		}, 16);
 }
 
+std::optional<TypeIndex> GetType(std::size_t lineNum, Identifiers& identifiers, Objects& objects, const std::string& operand) {
+	switch (CRC32(operand.c_str(), operand.size())) {
+	case "int"_h: return objects.ByteFile.GetTypeIndex(IntType);
+	case "long"_h: return objects.ByteFile.GetTypeIndex(LongType);
+	case "double"_h: return objects.ByteFile.GetTypeIndex(DoubleType);
+	case "pointer"_h: return objects.ByteFile.GetTypeIndex(PointerType);
+	}
+
+	const auto iter = std::find(identifiers.Structures.begin(), identifiers.Structures.end(), operand);
+	if (iter == identifiers.Structures.end()) {
+		std::cout << "Error: Line " << lineNum << ", Nonexistent type name '" << operand << "'.\n";
+		return std::nullopt;
+	}
+
+	return objects.ByteFile.GetTypeIndex(objects.Structures[operand]);
+}
 std::optional<FieldIndex> GetField(std::size_t lineNum, Identifiers& identifiers, Objects& objects, const std::string& operand) {
 	const std::size_t dotOffset = operand.find('.');
 
