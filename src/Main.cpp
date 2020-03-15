@@ -708,6 +708,22 @@ bool ThirdPass(std::ifstream& stream, Identifiers& identifiers, Objects& objects
 			break;
 		}
 		case "delete"_h: objects.Builders[identifiers.CurrentFunction]->Delete(); break;
+		case "gcnull"_h: objects.Builders[identifiers.CurrentFunction]->GCNull(); break;
+		case "gcnew"_h: {
+			const std::string op = ReadOperand(line, lineNum);
+			if (op.empty()) {
+				hasError = true;
+				break;
+			}
+			const auto type = GetType(lineNum, identifiers, objects, op);
+			if (!type.has_value()) {
+				hasError = true;
+				break;
+			}
+
+			objects.Builders[identifiers.CurrentFunction]->GCNew(type.value());
+			break;
+		}
 
 		default: {
 			std::cout << "Error: Line " << lineNum << ", Unrecognized mnemonic '" << mnemonic << "'.\n";
