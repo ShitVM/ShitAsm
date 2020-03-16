@@ -328,6 +328,7 @@ bool SecondPass(std::ifstream& stream, Identifiers& identifiers, Objects& object
 			{ "long"_h, LongType },
 			{ "double"_h, DoubleType },
 			{ "pointer"_h, PointerType },
+			{ "gcpointer"_h, GCPointerType },
 		};
 
 		const std::string mnemonic = ReadBeforeSpace(line);
