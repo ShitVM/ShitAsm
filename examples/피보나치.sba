@@ -21,3 +21,6 @@ calc:
 	call fibo
 	add
 	ret
+
+; 결과
+; 9227465

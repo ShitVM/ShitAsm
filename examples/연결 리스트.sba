@@ -1,0 +1,100 @@
+struct LinkedList:
+	gcpointer root
+	int size
+
+struct Node:
+	gcpointer next
+	int value
+
+func Get(list, index):
+	load list
+	flea LinkedList.root
+	tload
+	store node
+loop:
+	load index
+	je return
+	pop
+	lea index
+	dec
+	load node
+	flea Node.next
+	tload
+	store node
+	jmp loop
+return:
+	load node
+	ret
+
+proc Add(list, value):
+	load list
+	flea LinkedList.size
+	copy
+	inc
+	tload
+	jbe insert
+	pop
+	gcnew Node
+	store newNode
+	load newNode
+	flea Node.value
+	load value
+	tstore
+	load list
+	flea LinkedList.root
+	load newNode
+	tstore
+	ret
+insert:
+	gcnew Node
+	store newNode
+	load newNode
+	flea Node.value
+	load value
+	tstore
+	load list
+	flea LinkedList.size
+	tload
+	push 2
+	sub
+	load list
+	call Get
+	flea Node.next
+	load newNode
+	tstore
+	ret
+
+proc entrypoint:
+	gcnew LinkedList
+	store list
+
+	push 0
+	store i
+
+loop:
+	load i
+	load list
+	call Add
+
+	lea i
+	inc
+	load i
+	push 50000
+	cmp
+	je break
+	pop
+	jmp loop
+
+break:
+	load list
+	flea LinkedList.size
+	tload
+	push 1
+	sub
+	load list
+	call Get
+	flea Node.value
+	tload
+
+; 예상 결과
+; 49999

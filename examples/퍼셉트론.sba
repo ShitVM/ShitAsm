@@ -245,3 +245,6 @@ eval:
 	load input3
 	lea p
 	call evalPerceptron
+
+; 결과
+; 1.125

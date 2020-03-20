@@ -25,3 +25,6 @@ increase:
 true:
 	push 1
 	ret
+
+; 결과
+; 1
