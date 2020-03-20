@@ -96,5 +96,5 @@ break:
 	flea Node.value
 	tload
 
-; 예상 결과
+; 결과
 ; 49999
