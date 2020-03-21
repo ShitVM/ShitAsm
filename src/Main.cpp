@@ -1016,7 +1016,7 @@ std::variant<bool, std::uint32_t, std::uint64_t, double> ParseNumber(std::size_t
 			return static_cast<std::uint32_t>(value);
 		} else {
 			if (value <= std::numeric_limits<std::int32_t>::max() &&
-				value >= std::numeric_limits<std::int32_t>::min()) {
+				value >= std::numeric_limits<std::int32_t>::min() && opMut.back() != 'l') {
 				return static_cast<std::uint32_t>(value);
 			} else return static_cast<std::uint64_t>(value);
 		}
@@ -1028,7 +1028,7 @@ std::variant<bool, std::uint32_t, std::uint64_t, double> ParseNumber(std::size_t
 			}
 			return static_cast<std::uint32_t>(value);
 		} else {
-			if (value <= std::numeric_limits<std::uint32_t>::max()) {
+			if (value <= std::numeric_limits<std::uint32_t>::max() && opMut.back() != 'l') {
 				return static_cast<std::uint32_t>(value);
 			} else return static_cast<std::uint64_t>(value);
 		}
@@ -1066,14 +1066,14 @@ std::variant<bool, std::uint32_t, std::uint64_t, double> ParseWithoutDec(std::si
 			return static_cast<std::uint32_t>(value);
 		} else {
 			if (value <= std::numeric_limits<std::int32_t>::max() &&
-				value >= std::numeric_limits<std::int32_t>::min()) {
+				value >= std::numeric_limits<std::int32_t>::min() && opMut.back() != 'l') {
 				return static_cast<std::uint32_t>(value);
 			} else return static_cast<std::uint64_t>(value);
 		}
 	} else {
 		long long value = std::stoull(opMut, nullptr, base);
 		if (opMut.back() == 'i') {
-			if (value > std::numeric_limits<std::uint32_t>::max()) {
+			if (value > std::numeric_limits<std::uint32_t>::max() && opMut.back() != 'l') {
 				std::cout << "Warning: Line " << lineNum << ", Overflowed int literal '" << op << "'.\n";
 			}
 			return static_cast<std::uint32_t>(value);
