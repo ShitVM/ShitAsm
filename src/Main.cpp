@@ -42,6 +42,12 @@ struct Objects {
 	std::unordered_map<std::string, Builder*> Builders;
 };
 
+struct Array {
+	const Type* ElementType;
+	std::string ElementTypeName;
+	std::optional<std::uint64_t> Count;
+};
+
 bool IsSpecial(char c) noexcept;
 
 void Trim(std::string& string);
@@ -59,16 +65,19 @@ bool ThirdPass(std::ifstream& stream, Identifiers& identifiers, Objects& objects
 bool ParseProcOrFunc(std::string& line, bool isProc, std::size_t lineNum, Identifiers& identifiers, Objects& objects);
 bool ParseLabel(std::string& line, std::size_t lineNum, Identifiers& identifiers, Objects& objects);
 bool ParseStruct(std::string& line, std::size_t lineNum, Identifiers& identifers, Objects& objects);
+bool ParseField(std::string& line, std::size_t lineNum, Identifiers& identifiers, Objects& objects);
 
 std::string ReadOperand(std::string& line, std::size_t lineNum);
-std::variant<std::monostate, std::uint32_t, std::uint64_t, double> ParseNumber(std::size_t lineNum, const std::string& op);
+std::variant<bool, std::uint32_t, std::uint64_t, double> ParseNumber(std::size_t lineNum, const std::string& op);
 template<typename F>
-std::variant<std::monostate, std::uint32_t, std::uint64_t, double> ParseWithoutDec(std::size_t lineNum, const std::string& op, std::string& opMut, F function, int base);
-std::variant<std::monostate, std::uint32_t, std::uint64_t, double> ParseBin(std::size_t lineNum, const std::string& op, std::string& opMut);
-std::variant<std::monostate, std::uint32_t, std::uint64_t, double> ParseOct(std::size_t lineNum, const std::string& op, std::string& opMut);
-std::variant<std::monostate, std::uint32_t, std::uint64_t, double> ParseHex(std::size_t lineNum, const std::string& op, std::string& opMut);
+std::variant<bool, std::uint32_t, std::uint64_t, double> ParseWithoutDec(std::size_t lineNum, const std::string& op, std::string& opMut, F function, int base);
+std::variant<bool, std::uint32_t, std::uint64_t, double> ParseBin(std::size_t lineNum, const std::string& op, std::string& opMut);
+std::variant<bool, std::uint32_t, std::uint64_t, double> ParseOct(std::size_t lineNum, const std::string& op, std::string& opMut);
+std::variant<bool, std::uint32_t, std::uint64_t, double> ParseHex(std::size_t lineNum, const std::string& op, std::string& opMut);
+std::optional<Array> ReadArrayType(std::string& line, std::size_t lineNum, Identifiers& identifiers, Objects& objects);
 
 std::optional<TypeIndex> GetType(std::size_t lineNum, Identifiers& identifiers, Objects& objects, const std::string& operand);
+const Type* GetTypeFromName(const std::string& name, Identifiers& identifiers, Objects& objects);
 std::optional<FieldIndex> GetField(std::size_t lineNum, Identifiers& identifiers, Objects& objects, const std::string& operand);
 std::optional<FunctionIndex> GetFunction(std::size_t lineNum, Identifiers& identifiers, Objects& objects, const std::string& operand);
 std::optional<LabelIndex> GetLabel(std::size_t lineNum, Identifiers& identifiers, Objects& objects, const std::string& operand);
@@ -163,6 +172,7 @@ int main(int argc, char* argv[]) {
 		objects.ByteFile.Save(argv[2]);
 	}
 
+	std::cout << "Success!\n";
 	return EXIT_SUCCESS;
 }
 
@@ -288,6 +298,11 @@ bool FirstPass(std::ifstream& stream, Identifiers& identifiers, Objects& objects
 		}
 	}
 
+	if (std::find(identifiers.Functions.begin(), identifiers.Functions.end(), "entrypoint") == identifiers.Functions.end()) {
+		std::cout << "Error: There is no 'entrypoint' procedure.\n";
+		hasError = true;
+	}
+
 	return !hasError;
 }
 bool SecondPass(std::ifstream& stream, Identifiers& identifiers, Objects& objects) {
@@ -321,77 +336,7 @@ bool SecondPass(std::ifstream& stream, Identifiers& identifiers, Objects& object
 			continue;
 		} else if (identifiers.CurrentStructure.empty()) continue;
 
-		Structure* structure = objects.ByteFile.GetStructure(objects.Structures[identifiers.CurrentStructure]);
-
-		static const std::unordered_map<std::uint32_t, const Type*> fundamental = {
-			{ "int"_h, IntType },
-			{ "long"_h, LongType },
-			{ "double"_h, DoubleType },
-			{ "pointer"_h, PointerType },
-			{ "gcpointer"_h, GCPointerType },
-		};
-
-		const std::string mnemonic = ReadBeforeSpace(line);
-		const std::uint32_t mnemonicHash = CRC32(mnemonic.c_str(), mnemonic.size());
-		if (const auto iter = fundamental.find(mnemonicHash); iter != fundamental.end()) {
-			const std::string op = ReadOperand(line, lineNum);
-			if (op.empty()) {
-				hasError = true;
-				break;
-			} else if (objects.Fields.find(op) != objects.Fields.end()) {
-				std::cout << "Error: Line " << lineNum << ", Duplicated field name '" << op << "'.\n";
-				hasError = true;
-				break;
-			} else if (std::isdigit(op.front())) {
-				std::cout << "Error: Line " << lineNum << ", Invalid field name '" << op << "'.\n";
-				hasError = true;
-				break;
-			}
-			for (const char c : op) {
-				if (IsSpecial(c)) {
-					std::cout << "Error: Line " << lineNum << ", Invalid field name '" << op << "'.\n";
-					hasError = true;
-					goto out1;
-				}
-			}
-
-			identifiers.Fields[identifiers.CurrentStructure].push_back(op);
-			objects.Fields[identifiers.CurrentStructure][op] = structure->AddField(iter->second);
-
-		out1:
-			continue;
-		}
-
-		if (const auto iter = std::find(identifiers.Structures.begin(), identifiers.Structures.end(), mnemonic);
-			iter != identifiers.Structures.end()) {
-			const std::string op = ReadOperand(line, lineNum);
-			if (op.empty()) {
-				hasError = true;
-				break;
-			} else if (objects.Fields.find(op) != objects.Fields.end()) {
-				std::cout << "Error: Line " << lineNum << ", Duplicated field name '" << op << "'.\n";
-				hasError = true;
-				break;
-			} else if (std::isdigit(op.front())) {
-				std::cout << "Error: Line " << lineNum << ", Invalid field name '" << op << "'.\n";
-				hasError = true;
-				break;
-			}
-			for (const char c : op) {
-				if (IsSpecial(c)) {
-					std::cout << "Error: Line " << lineNum << ", Invalid field name '" << op << "'.\n";
-					hasError = true;
-					goto out2;
-				}
-			}
-
-			identifiers.Fields[identifiers.CurrentStructure].push_back(op);
-			objects.Fields[identifiers.CurrentStructure][op] = structure->AddField(objects.ByteFile.GetStructure(objects.Structures[*iter])->GetType());
-
-		out2:
-			continue;
-		} else {
-			std::cout << "Error: Line " << lineNum << ", Nonexistent type name '" << mnemonic << "'.\n";
+		if (!ParseField(line, lineNum, identifiers, objects)) {
 			hasError = true;
 		}
 	}
@@ -450,7 +395,7 @@ bool ThirdPass(std::ifstream& stream, Identifiers& identifiers, Objects& objects
 
 			if (op.front() == '+' || op.front() == '-' || std::isdigit(op.front())) {
 				const auto val = ParseNumber(lineNum, op);
-				if (std::holds_alternative<std::monostate>(val)) {
+				if (std::holds_alternative<bool>(val)) {
 					hasError = true;
 				} else if (std::holds_alternative<std::uint32_t>(val)) {
 					const auto inx = objects.ByteFile.AddIntConstant(std::get<std::uint32_t>(val));
@@ -726,6 +671,63 @@ bool ThirdPass(std::ifstream& stream, Identifiers& identifiers, Objects& objects
 			break;
 		}
 
+		case "apush"_h: {
+			const auto array = ReadArrayType(line, lineNum, identifiers, objects);
+			if (!array) {
+				hasError = true;
+				break;
+			} else if (array->ElementType == nullptr) {
+				std::cout << "Error: Line " << lineNum << ", Nonexistent type name '" << array->ElementTypeName << "'.\n";
+				hasError = true;
+				break;
+			} else if (array->Count) {
+				std::cout << "Error: Line " << lineNum << ", Array's length cannot be used here.\n";
+				hasError = true;
+				break;
+			}
+
+			objects.Builders[identifiers.CurrentFunction]->APush(objects.ByteFile.MakeArray(array->ElementType));
+			break;
+		}
+		case "anew"_h: {
+			const auto array = ReadArrayType(line, lineNum, identifiers, objects);
+			if (!array) {
+				hasError = true;
+				break;
+			} else if (array->ElementType == nullptr) {
+				std::cout << "Error: Line " << lineNum << ", Nonexistent type name '" << array->ElementTypeName << "'.\n";
+				hasError = true;
+				break;
+			} else if (array->Count) {
+				std::cout << "Error: Line " << lineNum << ", Array's length cannot be used here.\n";
+				hasError = true;
+				break;
+			}
+
+			objects.Builders[identifiers.CurrentFunction]->ANew(objects.ByteFile.MakeArray(array->ElementType));
+			break;
+		}
+		case "agcnew"_h: {
+			const auto array = ReadArrayType(line, lineNum, identifiers, objects);
+			if (!array) {
+				hasError = true;
+				break;
+			} else if (array->ElementType == nullptr) {
+				std::cout << "Error: Line " << lineNum << ", Nonexistent type name '" << array->ElementTypeName << "'.\n";
+				hasError = true;
+				break;
+			} else if (array->Count) {
+				std::cout << "Error: Line " << lineNum << ", Array's length cannot be used here.\n";
+				hasError = true;
+				break;
+			}
+
+			objects.Builders[identifiers.CurrentFunction]->AGCNew(objects.ByteFile.MakeArray(array->ElementType));
+			break;
+		}
+		case "alea"_h: objects.Builders[identifiers.CurrentFunction]->ALea(); break;
+		case "count"_h: objects.Builders[identifiers.CurrentFunction]->Count(); break;
+
 		default: {
 			std::cout << "Error: Line " << lineNum << ", Unrecognized mnemonic '" << mnemonic << "'.\n";
 			hasError = true;
@@ -900,6 +902,47 @@ bool ParseStruct(std::string& line, std::size_t lineNum, Identifiers& identifier
 	objects.Structures[name] = objects.ByteFile.AddStructure();
 	return !hasError;
 }
+bool ParseField(std::string& line, std::size_t lineNum, Identifiers& identifiers, Objects& objects) {
+	bool hasError = false;
+
+	Structure* structure = objects.ByteFile.GetStructure(objects.Structures[identifiers.CurrentStructure]);
+
+	const auto typeInfo = ReadArrayType(line, lineNum, identifiers, objects);
+	if (!typeInfo) return false;
+	else if (typeInfo->Count && typeInfo->Count == 0) {
+		std::cout << "Error: Line " << lineNum << ", Array in structure must have length.\n";
+		return false;
+	}
+
+	std::string name = ReadBeforeSpace(line);
+	Trim(name);
+	if (!line.empty()) {
+		std::cout << "Error: Line " << lineNum << ", Unexcepted characters after field name.\n";
+		hasError = true;
+	}
+
+	if (std::isdigit(name.front())) {
+		std::cout << "Error: Line " << lineNum << ", Invalid field name '" << name << "'.\n";
+		return false;
+	}
+
+	for (const char c : name) {
+		if (IsSpecial(c)) {
+			std::cout << "Error: Line " << lineNum << ", Invalid field name '" << name << "'.\n";
+			return false;
+		}
+	}
+
+	if (typeInfo->ElementType == nullptr) {
+		std::cout << "Error: Line " << lineNum << ", Nonexistent type name '" << typeInfo->ElementTypeName << "'.\n";
+		return false;
+	}
+
+	identifiers.Fields[identifiers.CurrentStructure].push_back(name);
+	objects.Fields[identifiers.CurrentStructure][name] = structure->AddField(typeInfo->ElementType, *typeInfo->Count);
+
+	return !hasError;
+}
 
 std::string ReadOperand(std::string& line, std::size_t lineNum) {
 	const std::string result = ReadBeforeSpace(line);
@@ -909,7 +952,9 @@ std::string ReadOperand(std::string& line, std::size_t lineNum) {
 	}
 	return result;
 }
-std::variant<std::monostate, std::uint32_t, std::uint64_t, double> ParseNumber(std::size_t lineNum, const std::string& op) {
+std::variant<bool, std::uint32_t, std::uint64_t, double> ParseNumber(std::size_t lineNum, const std::string& op) {
+	if (op.empty()) return false;
+
 	std::string opMut = op;
 
 	if (opMut.front() == '0') {
@@ -942,20 +987,20 @@ std::variant<std::monostate, std::uint32_t, std::uint64_t, double> ParseNumber(s
 			else if (i == opMut.size() - 1 && (opMut[i] == 'i' || opMut[i] == 'l')) continue;
 
 			std::cout << "Error: Line " << lineNum << ", Invalid number literal '" << op << "'.\n";
-			return std::monostate();
+			return true;
 		}
 	}
 
 	if (const std::size_t dot = opMut.find('.'); dot != std::string::npos) {
 		if (opMut.find('.', dot + 1) != std::string::npos) {
 			std::cout << "Error: Line " << lineNum << ", Invalid number literal '" << op << "'.\n";
-			return std::monostate();
+			return true;
 		}
 
 		const double value = std::stod(opMut);
 		if (!std::isdigit(opMut.back())) {
 			std::cout << "Error: Line " << lineNum << ", Invalid number literal '" << op << "'.\n";
-			return std::monostate();
+			return true;
 		}
 
 		return value;
@@ -990,10 +1035,10 @@ std::variant<std::monostate, std::uint32_t, std::uint64_t, double> ParseNumber(s
 	}
 }
 template<typename F>
-std::variant<std::monostate, std::uint32_t, std::uint64_t, double> ParseWithoutDec(std::size_t lineNum, const std::string& op, std::string& opMut, F function, int base) {
+std::variant<bool, std::uint32_t, std::uint64_t, double> ParseWithoutDec(std::size_t lineNum, const std::string& op, std::string& opMut, F function, int base) {
 	if (opMut.find('.') != std::string::npos) {
 		std::cout << "Error: Line " << lineNum << ", Invalid number literal '" << op << "'.\n";
-		return std::monostate();
+		return true;
 	}
 
 	for (std::size_t i = 0; i < opMut.size(); ++i) {
@@ -1006,7 +1051,7 @@ std::variant<std::monostate, std::uint32_t, std::uint64_t, double> ParseWithoutD
 			else if (i == opMut.size() - 1 && (opMut[i] == 'i' || opMut[i] == 'l')) continue;
 			else if (function(opMut[i])) {
 				std::cout << "Error: Line " << lineNum << ", Invalid number literal '" << op << "'.\n";
-				return std::monostate();
+				return true;
 			}
 		}
 	}
@@ -1039,22 +1084,22 @@ std::variant<std::monostate, std::uint32_t, std::uint64_t, double> ParseWithoutD
 		}
 	}
 }
-std::variant<std::monostate, std::uint32_t, std::uint64_t, double> ParseBin(std::size_t lineNum, const std::string& op, std::string& opMut) {
+std::variant<bool, std::uint32_t, std::uint64_t, double> ParseBin(std::size_t lineNum, const std::string& op, std::string& opMut) {
 	return ParseWithoutDec(lineNum, op, opMut, [](char c) {
 		return c != '0' && c != '1' && c != ',';
 		}, 2);
 }
-std::variant<std::monostate, std::uint32_t, std::uint64_t, double> ParseOct(std::size_t lineNum, const std::string& op, std::string& opMut) {
+std::variant<bool, std::uint32_t, std::uint64_t, double> ParseOct(std::size_t lineNum, const std::string& op, std::string& opMut) {
 	if (const std::size_t dot = opMut.find('.'); dot != std::string::npos) {
 		if (opMut.find('.', dot + 1) != std::string::npos) {
 			std::cout << "Error: Line " << lineNum << ", Invalid number literal '" << op << "'.\n";
-			return std::monostate();
+			return true;
 		}
 
 		const double value = std::stod(opMut);
 		if (!std::isdigit(opMut.back())) {
 			std::cout << "Error: Line " << lineNum << ", Invalid number literal '" << op << "'.\n";
-			return std::monostate();
+			return true;
 		}
 
 		return value;
@@ -1064,10 +1109,55 @@ std::variant<std::monostate, std::uint32_t, std::uint64_t, double> ParseOct(std:
 		return '0' > c&& c > '7' && c != ',';
 		}, 8);
 }
-std::variant<std::monostate, std::uint32_t, std::uint64_t, double> ParseHex(std::size_t lineNum, const std::string& op, std::string& opMut) {
+std::variant<bool, std::uint32_t, std::uint64_t, double> ParseHex(std::size_t lineNum, const std::string& op, std::string& opMut) {
 	return ParseWithoutDec(lineNum, op, opMut, [](char c) {
 		return !std::isdigit(c) && c != ',';
 		}, 16);
+}
+std::optional<Array> ReadArrayType(std::string& line, std::size_t lineNum, Identifiers& identifiers, Objects& objects) {
+	std::string typeNameRaw;
+	if (line.find('[') != std::string::npos) {
+		typeNameRaw = ReadBeforeChar(line, '[');
+	} else {
+		typeNameRaw = ReadBeforeSpace(line);
+	}
+	Trim(typeNameRaw);
+	std::string typeName = ReadBeforeSpace(typeNameRaw); Trim(typeName);
+
+	if (line.empty() || line.front() != '[') return Array{ GetTypeFromName(typeName, identifiers, objects), typeName };
+	else {
+		bool hasError = false;
+
+		std::optional<std::uint64_t> count;
+
+		if (!typeNameRaw.empty()) {
+			std::cout << "Error: Line " << lineNum << ", Unexcepted characters after type name '" << typeName << "'.\n";
+			hasError = true;
+		}
+
+		std::string countStr = ReadBeforeChar(line, ']');
+		countStr.erase(countStr.begin());
+		Trim(countStr);
+
+		line.erase(line.begin());
+		Trim(line);
+
+		const auto countVariant = ParseNumber(lineNum, countStr);
+		if (std::holds_alternative<bool>(countVariant) && std::get<bool>(countVariant)) return std::nullopt;
+		else if (std::holds_alternative<double>(countVariant)) {
+			std::cout << "Error: Line " << lineNum << ", Array's length must be integer.";
+			count = 1;
+			hasError = true;
+		}
+		std::visit([&count](auto v) mutable {
+			if constexpr (!std::is_same_v<std::decay_t<decltype(v)>, bool>) {
+				count = v;
+			}
+			}, countVariant);
+
+		if (hasError) return std::nullopt;
+		else return Array{ GetTypeFromName(typeName, identifiers, objects), typeName, count };
+	}
 }
 
 std::optional<TypeIndex> GetType(std::size_t lineNum, Identifiers& identifiers, Objects& objects, const std::string& operand) {
@@ -1085,6 +1175,23 @@ std::optional<TypeIndex> GetType(std::size_t lineNum, Identifiers& identifiers, 
 	}
 
 	return objects.ByteFile.GetTypeIndex(objects.Structures[operand]);
+}
+const Type* GetTypeFromName(const std::string& name, Identifiers& identifiers, Objects& objects) {
+	static const std::unordered_map<std::string, const Type*> fundamental = {
+		{ "int", IntType },
+		{ "long", LongType },
+		{ "double", DoubleType },
+		{ "pointer", PointerType },
+		{ "gcpointer", GCPointerType },
+	};
+
+	const auto fundamentalIter = fundamental.find(name);
+	if (fundamentalIter != fundamental.end()) return fundamentalIter->second;
+	else {
+		const auto structIter = std::find(identifiers.Structures.begin(), identifiers.Structures.end(), name);
+		if (structIter == identifiers.Structures.end()) return nullptr;
+		else return objects.ByteFile.GetStructure(objects.Structures[name])->GetType();
+	}
 }
 std::optional<FieldIndex> GetField(std::size_t lineNum, Identifiers& identifiers, Objects& objects, const std::string& operand) {
 	const std::size_t dotOffset = operand.find('.');
