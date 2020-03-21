@@ -939,7 +939,7 @@ bool ParseField(std::string& line, std::size_t lineNum, Identifiers& identifiers
 	}
 
 	identifiers.Fields[identifiers.CurrentStructure].push_back(name);
-	objects.Fields[identifiers.CurrentStructure][name] = structure->AddField(typeInfo->ElementType, *typeInfo->Count);
+	objects.Fields[identifiers.CurrentStructure][name] = structure->AddField(typeInfo->ElementType, typeInfo->Count.value_or(0));
 
 	return !hasError;
 }
