@@ -1,0 +1,140 @@
+proc swap(a, b):
+	load a
+	tload
+	store temp
+
+	load a
+	load b
+	tload
+	tstore
+
+	load b
+	load temp
+	tstore
+
+	ret
+
+proc bubbleSort(array):
+	load array
+	count
+	toi
+	push 1
+	sub
+	store i
+firstLoop:
+	load i
+	je firstLoopBreak
+	pop
+
+	push 0
+	store j
+secondLoop:
+	load j
+	load i
+	cmp
+	jae secondLoopBreak
+
+	load array
+	load j
+	alea
+	tload
+	load array
+	load j
+	push 1
+	add
+	alea
+	tload
+	cmp
+	jb secondLoopIncrease
+	pop
+
+	load array
+	load j
+	alea
+	load array
+	load j
+	push 1
+	add
+	alea
+	call swap
+
+secondLoopIncrease:
+	lea j
+	inc
+	jmp secondLoop
+
+secondLoopBreak:
+	lea i
+	dec
+	jmp firstLoop
+
+firstLoopBreak:
+	ret
+
+proc entrypoint:
+	push 10
+	apush int[]
+	store array
+
+	lea array
+	push 0
+	alea
+	push 4
+	tstore
+
+	lea array
+	push 1
+	alea
+	push 5
+	tstore
+
+	lea array
+	push 2
+	alea
+	push 1
+	tstore
+
+	lea array
+	push 3
+	alea
+	push 9
+	tstore
+
+	lea array
+	push 4
+	alea
+	push 6
+	tstore
+
+	lea array
+	push 5
+	alea
+	push 3
+	tstore
+
+	lea array
+	push 6
+	alea
+	push 7
+	tstore
+
+	lea array
+	push 7
+	alea
+	push 0
+	tstore
+
+	lea array
+	push 8
+	alea
+	push 8
+	tstore
+
+	lea array
+	push 9
+	alea
+	push 2
+	tstore
+
+	lea array
+	call bubbleSort
