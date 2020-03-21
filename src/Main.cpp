@@ -1151,7 +1151,7 @@ std::optional<Array> ReadArrayType(std::string& line, std::size_t lineNum, Ident
 		}
 		std::visit([&count](auto v) mutable {
 			if constexpr (!std::is_same_v<std::decay_t<decltype(v)>, bool>) {
-				count = v;
+				count = static_cast<std::uint64_t>(v);
 			}
 			}, countVariant);
 
