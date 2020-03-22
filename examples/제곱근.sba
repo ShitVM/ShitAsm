@@ -1,0 +1,45 @@
+func sqrt(n):
+	load n
+	push 1.0
+	add
+	push 2.0
+	div
+	store next
+
+loop:
+	load next
+	store prev
+
+	load n
+	load next
+	div
+	load next
+	add
+	push 2.0
+	div
+	store next
+
+	load prev
+	load next
+	sub
+	copy
+	push 0.005
+	cmp
+	jb break
+	pop
+	push -0.005
+	cmp
+	jb break
+	pop
+	jmp loop
+
+break:
+	load next
+	ret
+
+proc entrypoint:
+	push 3.14
+	call sqrt
+
+; 결과
+; 1.772
