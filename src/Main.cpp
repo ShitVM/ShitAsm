@@ -971,7 +971,6 @@ std::variant<bool, std::uint32_t, std::uint64_t, double> ParseNumber(std::size_t
 				return ParseBin(lineNum, op, opMut);
 
 			default:
-				opMut.erase(opMut.begin());
 				return ParseOct(lineNum, op, opMut);
 			}
 		} else return 0u;
