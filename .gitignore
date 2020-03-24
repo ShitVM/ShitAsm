@@ -2,6 +2,9 @@ bin/
 [Tt]est*/
 [Tt]est*.*
 
+# macOS
+.DS_Store
+
 # CMake
 CMakeFiles/
 CMakeScripts/

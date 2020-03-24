@@ -1,0 +1,184 @@
+proc entrypoint:
+	push 1000000009l
+	call is_prime
+ 
+func is_prime(n):
+	load n
+	push 2l
+	cmp
+	je break1
+	pop
+	load n
+	push 7l
+	cmp
+	je break1
+	pop
+	load n
+	push 61l
+	cmp
+	je break1
+	pop
+	; test for a=2
+	load n
+	push 2l
+	call witness
+	push 1
+	cmp
+	je break2
+	pop
+	; test for a=7
+	load n
+	push 7l
+	call witness
+	push 1
+	cmp
+	je break2
+	pop
+	; test for a=61
+	load n
+	push 61l
+	call witness
+	push 1
+	cmp
+	je break2
+	pop
+	jmp break1
+break1:
+	push 1
+	ret
+break2:
+	push 0
+	ret
+ 
+func witness(a,n):
+	load n
+	push 1l
+	sub
+	store u
+	push 0l
+	store t
+	jmp loop1
+loop1:
+	load u
+	push 1l
+	and
+	push 1l
+	cmp
+	je wit2
+	pop
+	load u
+	push 1l
+	shr
+	store u
+	load t
+	push 1l
+	add
+	store t
+	jmp loop1
+wit2:
+	load n
+	load u
+	load a
+	call fast_pow
+	store x
+	load x
+	push 1l
+	cmp
+	je break1
+	pop
+	load n
+	push 1l
+	sub
+	load x
+	cmp
+	je break1
+	pop
+	push 0l
+	store j
+	load t
+	push 0l
+	cmp
+	je break2
+	pop
+	jmp loop2
+loop2:
+	load j
+	load t
+	push 1l
+	sub
+	cmp
+	je break2
+	pop
+	load x
+	load x
+	mul
+	load n
+	mod
+	store x
+	load n
+	push 1l
+	sub
+	load x
+	cmp
+	je break1
+	pop
+	load j
+	push 1l
+	add
+	store j
+	jmp loop2
+break1:
+	push 0
+	ret
+break2:
+	push 1
+	ret
+ 
+func fast_pow(a,x,p):
+	push 1l
+	store r
+	load a
+	store a_t
+	load x
+	store x_t
+	jmp loop
+loop:
+	load x_t
+	push 0l
+	cmp
+	je break
+	pop
+	load x_t
+	push 1l
+	and
+	push 1l
+	cmp
+	je update_r
+	pop
+	jmp loop2
+update_r:
+	load r
+	load a_t
+	mul
+	load p
+	mod
+	store r
+	jmp loop2
+loop2:
+	load a_t
+	load a_t
+	mul
+	load p
+	mod
+	store a_t
+	load x_t
+	push 1l
+	shr
+	store x_t
+	jmp loop
+break:
+	load r
+	ret
+
+; 결과
+; 1
