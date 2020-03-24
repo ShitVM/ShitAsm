@@ -220,7 +220,7 @@ void Trim(std::string& string) {
 	std::size_t beginOffset = 0;
 	std::size_t rbeginOffset = 0;
 
-	while (string.size() > rbeginOffset&& std::isspace(string[string.size() - rbeginOffset - 1])) ++rbeginOffset;
+	while (string.size() > rbeginOffset && std::isspace(string[string.size() - rbeginOffset - 1])) ++rbeginOffset;
 	while (string.size() > beginOffset + rbeginOffset && std::isspace(string[beginOffset])) ++beginOffset;
 
 	if (beginOffset) {
@@ -971,7 +971,6 @@ std::variant<bool, std::uint32_t, std::uint64_t, double> ParseNumber(std::size_t
 				return ParseBin(lineNum, op, opMut);
 
 			default:
-				opMut.erase(opMut.begin());
 				return ParseOct(lineNum, op, opMut);
 			}
 		} else return 0u;
@@ -1073,12 +1072,12 @@ std::variant<bool, std::uint32_t, std::uint64_t, double> ParseWithoutDec(std::si
 	} else {
 		long long value = std::stoull(opMut, nullptr, base);
 		if (opMut.back() == 'i') {
-			if (value > std::numeric_limits<std::uint32_t>::max() && opMut.back() != 'l') {
+			if (value > std::numeric_limits<std::uint32_t>::max()) {
 				std::cout << "Warning: Line " << lineNum << ", Overflowed int literal '" << op << "'.\n";
 			}
 			return static_cast<std::uint32_t>(value);
 		} else {
-			if (value <= std::numeric_limits<std::uint32_t>::max()) {
+			if (value <= std::numeric_limits<std::uint32_t>::max() && opMut.back() != 'l') {
 				return static_cast<std::uint32_t>(value);
 			} else return static_cast<std::uint64_t>(value);
 		}
@@ -1106,7 +1105,7 @@ std::variant<bool, std::uint32_t, std::uint64_t, double> ParseOct(std::size_t li
 	}
 
 	return ParseWithoutDec(lineNum, op, opMut, [](char c) {
-		return '0' > c&& c > '7' && c != ',';
+		return '0' > c && c > '7' && c != ',';
 		}, 8);
 }
 std::variant<bool, std::uint32_t, std::uint64_t, double> ParseHex(std::size_t lineNum, const std::string& op, std::string& opMut) {
