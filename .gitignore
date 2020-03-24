@@ -21,3 +21,6 @@ Makefile
 *.filters
 *.user
 cpp.hint
+
+*/.DS_Store
+.DS_Store
