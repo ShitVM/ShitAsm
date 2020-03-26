@@ -1,5 +1,6 @@
 #include <sgn/Builder.hpp>
 #include <sgn/ByteFile.hpp>
+#include <sgn/Generator.hpp>
 
 #include <algorithm>
 #include <cctype>
@@ -43,7 +44,7 @@ struct Objects {
 };
 
 struct Array {
-	const Type* ElementType;
+	Type ElementType;
 	std::string ElementTypeName;
 	std::optional<std::uint64_t> Count;
 };
@@ -62,8 +63,10 @@ bool FirstPass(std::ifstream& stream, Identifiers& identifiers, Objects& objects
 bool SecondPass(std::ifstream& stream, Identifiers& identifiers, Objects& objects);
 bool ThirdPass(std::ifstream& stream, Identifiers& identifiers, Objects& objects);
 
+void GenerateBuilders(Identifiers& identifiers, Objects& objects);
+
 bool ParseProcOrFunc(std::string& line, bool isProc, std::size_t lineNum, Identifiers& identifiers, Objects& objects);
-bool ParseLabel(std::string& line, std::size_t lineNum, Identifiers& identifiers, Objects& objects);
+bool ParseLabel(std::string& line, std::size_t lineNum, Identifiers& identifiers);
 bool ParseStruct(std::string& line, std::size_t lineNum, Identifiers& identifers, Objects& objects);
 bool ParseField(std::string& line, std::size_t lineNum, Identifiers& identifiers, Objects& objects);
 
@@ -77,7 +80,7 @@ std::variant<bool, std::uint32_t, std::uint64_t, double> ParseHex(std::size_t li
 std::optional<Array> ReadArrayType(std::string& line, std::size_t lineNum, Identifiers& identifiers, Objects& objects);
 
 std::optional<TypeIndex> GetType(std::size_t lineNum, Identifiers& identifiers, Objects& objects, const std::string& operand);
-const Type* GetTypeFromName(const std::string& name, Identifiers& identifiers, Objects& objects);
+Type GetTypeFromName(const std::string& name, Identifiers& identifiers, Objects& objects);
 std::optional<FieldIndex> GetField(std::size_t lineNum, Identifiers& identifiers, Objects& objects, const std::string& operand);
 std::optional<FunctionIndex> GetFunction(std::size_t lineNum, Identifiers& identifiers, Objects& objects, const std::string& operand);
 std::optional<LabelIndex> GetLabel(std::size_t lineNum, Identifiers& identifiers, Objects& objects, const std::string& operand);
@@ -155,6 +158,7 @@ int main(int argc, char* argv[]) {
 	Objects objects;
 
 	if (!FirstPass(inputFile, identifiers, objects)) return EXIT_FAILURE;
+	GenerateBuilders(identifiers, objects);
 
 	inputFile.clear();
 	inputFile.seekg(0, std::ifstream::beg);
@@ -166,11 +170,16 @@ int main(int argc, char* argv[]) {
 
 	if (!ThirdPass(inputFile, identifiers, objects)) return EXIT_FAILURE;
 
+	std::string path;
+
 	if (argc == 2) {
-		objects.ByteFile.Save("./ShitAsmOutput.sbf");
+		path = "./ShitAsmOutput.sbf";
 	} else {
-		objects.ByteFile.Save(argv[2]);
+		path = argv[2];
 	}
+
+	Generator gen(objects.ByteFile);
+	gen.Generate(path);
 
 	std::cout << "Success!\n";
 	return EXIT_SUCCESS;
@@ -291,7 +300,7 @@ bool FirstPass(std::ifstream& stream, Identifiers& identifiers, Objects& objects
 					hasError = true;
 				}
 			} else {
-				if (!ParseLabel(line, lineNum, identifiers, objects)) {
+				if (!ParseLabel(line, lineNum, identifiers)) {
 					hasError = true;
 				}
 			}
@@ -739,6 +748,26 @@ bool ThirdPass(std::ifstream& stream, Identifiers& identifiers, Objects& objects
 	return !hasError;
 }
 
+void GenerateBuilders(Identifiers& identifiers, Objects& objects) {
+	for (const auto& funcName : identifiers.Functions) {
+		if (funcName == "entrypoint") {
+			objects.Builders[funcName] = new Builder(objects.ByteFile, objects.ByteFile.GetEntrypoint());
+		} else {
+			objects.Builders[funcName] = new Builder(objects.ByteFile, objects.Functions[funcName]);
+		}
+
+		for (const auto& label : identifiers.Labels[funcName]) {
+			objects.Labels[funcName][label] = objects.Builders[funcName]->ReserveLabel(label);
+		}
+
+		std::uint32_t i = 0;
+		for (const auto& param : identifiers.LocalVariables[funcName]) {
+			objects.LocalVariables[funcName][param] = objects.Builders[funcName]->GetArgument(i);
+			++i;
+		}
+	}
+}
+
 bool ParseProcOrFunc(std::string& line, bool isProc, std::size_t lineNum, Identifiers& identifiers, Objects& objects) {
 	bool hasError = false;
 
@@ -796,6 +825,8 @@ bool ParseProcOrFunc(std::string& line, bool isProc, std::size_t lineNum, Identi
 		}
 	}
 
+	objects.Functions[name] = objects.ByteFile.AddFunction(static_cast<std::uint16_t>(identifiers.LocalVariables[name].size()), !isProc);
+
 	if (line.front() != ':') {
 		std::cout << "Error: Line " << lineNum << ", Excepted ':' after parameters.\n";
 		hasError = true;
@@ -804,23 +835,9 @@ bool ParseProcOrFunc(std::string& line, bool isProc, std::size_t lineNum, Identi
 		hasError = true;
 	}
 
-	if (name == "entrypoint") {
-		objects.Builders[name] = new Builder(objects.ByteFile, objects.ByteFile.GetEntryPoint());
-	} else {
-		const auto func = objects.ByteFile.AddFunction(static_cast<std::uint16_t>(identifiers.LocalVariables[name].size()), !isProc);
-		objects.Functions[name] = func;
-		objects.Builders[name] = new Builder(objects.ByteFile, func);
-	}
-
-	std::uint32_t i = 0;
-	for (const auto& param : identifiers.LocalVariables[identifiers.CurrentFunction]) {
-		objects.LocalVariables[identifiers.CurrentFunction][param] = objects.Builders[identifiers.CurrentFunction]->GetArgument(i);
-		++i;
-	}
-
 	return !hasError;
 }
-bool ParseLabel(std::string& line, std::size_t lineNum, Identifiers& identifiers, Objects& objects) {
+bool ParseLabel(std::string& line, std::size_t lineNum, Identifiers& identifiers) {
 	if (identifiers.CurrentFunction.empty()) {
 		std::cout << "Error: Line " << lineNum << ", Not belonged label.\n";
 		return false;
@@ -850,9 +867,6 @@ bool ParseLabel(std::string& line, std::size_t lineNum, Identifiers& identifiers
 	}
 
 	identifiers.Labels[identifiers.CurrentFunction].push_back(name);
-
-	const auto label = objects.Builders[identifiers.CurrentFunction]->ReserveLabel(name);
-	objects.Labels[identifiers.CurrentFunction][name] = label;
 
 	if (line.front() != ':') {
 		std::cout << "Error: Line " << lineNum << ", Excepted ':' after label name.\n";
@@ -905,7 +919,7 @@ bool ParseStruct(std::string& line, std::size_t lineNum, Identifiers& identifier
 bool ParseField(std::string& line, std::size_t lineNum, Identifiers& identifiers, Objects& objects) {
 	bool hasError = false;
 
-	Structure* structure = objects.ByteFile.GetStructure(objects.Structures[identifiers.CurrentStructure]);
+	StructureInfo* const structure = objects.ByteFile.GetStructureInfo(objects.Structures[identifiers.CurrentStructure]);
 
 	const auto typeInfo = ReadArrayType(line, lineNum, identifiers, objects);
 	if (!typeInfo) return false;
@@ -1165,6 +1179,7 @@ std::optional<TypeIndex> GetType(std::size_t lineNum, Identifiers& identifiers, 
 	case "long"_h: return objects.ByteFile.GetTypeIndex(LongType);
 	case "double"_h: return objects.ByteFile.GetTypeIndex(DoubleType);
 	case "pointer"_h: return objects.ByteFile.GetTypeIndex(PointerType);
+	case "gcpointer"_h: return objects.ByteFile.GetTypeIndex(GCPointerType);
 	}
 
 	const auto iter = std::find(identifiers.Structures.begin(), identifiers.Structures.end(), operand);
@@ -1175,8 +1190,8 @@ std::optional<TypeIndex> GetType(std::size_t lineNum, Identifiers& identifiers, 
 
 	return objects.ByteFile.GetTypeIndex(objects.Structures[operand]);
 }
-const Type* GetTypeFromName(const std::string& name, Identifiers& identifiers, Objects& objects) {
-	static const std::unordered_map<std::string, const Type*> fundamental = {
+Type GetTypeFromName(const std::string& name, Identifiers& identifiers, Objects& objects) {
+	static const std::unordered_map<std::string, Type> fundamental = {
 		{ "int", IntType },
 		{ "long", LongType },
 		{ "double", DoubleType },
@@ -1189,7 +1204,7 @@ const Type* GetTypeFromName(const std::string& name, Identifiers& identifiers, O
 	else {
 		const auto structIter = std::find(identifiers.Structures.begin(), identifiers.Structures.end(), name);
 		if (structIter == identifiers.Structures.end()) return nullptr;
-		else return objects.ByteFile.GetStructure(objects.Structures[name])->GetType();
+		else return objects.ByteFile.GetStructureInfo(objects.Structures[name])->Type;
 	}
 }
 std::optional<FieldIndex> GetField(std::size_t lineNum, Identifiers& identifiers, Objects& objects, const std::string& operand) {
