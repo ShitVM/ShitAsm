@@ -1,6 +1,5 @@
 #pragma once
 
-#include <sam/ExternModule.hpp>
 #include <sam/Function.hpp>
 #include <sam/Structure.hpp>
 #include <sgn/ByteFile.hpp>
@@ -8,6 +7,8 @@
 #include <vector>
 
 namespace sam {
+	struct ExternModule;
+
 	struct Assembly final {
 		sgn::ByteFile ByteFile;
 

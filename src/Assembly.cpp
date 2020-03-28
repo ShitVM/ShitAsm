@@ -1,5 +1,7 @@
 #include <sam/Assembly.hpp>
 
+#include <sam/ExternModule.hpp>
+
 #include <algorithm>
 
 namespace sam {
