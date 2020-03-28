@@ -4,7 +4,7 @@
 
 namespace sam {
 	std::vector<Structure>::iterator Assembly::FindStructure(const std::string& name) {
-		return std::find(Structures.begin(), Structures.end(), [name](const Structure& structure) {
+		return std::find_if(Structures.begin(), Structures.end(), [name](const Structure& structure) {
 			return structure.Name == name;
 		});
 	}
@@ -15,7 +15,7 @@ namespace sam {
 		return FindStructure(name) != Structures.end();
 	}
 	std::vector<Function>::iterator Assembly::FindFunction(const std::string& name) {
-		return std::find(Functions.begin(), Functions.end(), [name](const Function& function) {
+		return std::find_if(Functions.begin(), Functions.end(), [name](const Function& function) {
 			return function.Name == name;
 		});
 	}

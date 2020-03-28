@@ -4,7 +4,7 @@
 
 namespace sam {
 	std::vector<Label>::iterator Function::FindLabel(const std::string& name) {
-		return std::find(Labels.begin(), Labels.end(), [name](const Label& label) {
+		return std::find_if(Labels.begin(), Labels.end(), [name](const Label& label) {
 			return label.Name == name;
 		});
 	}
@@ -15,7 +15,7 @@ namespace sam {
 		return FindLabel(name) != Labels.end();
 	}
 	std::vector<LocalVariable>::iterator Function::FindLocalVariable(const std::string& name) {
-		return std::find(LocalVariables.begin(), LocalVariables.end(), [name](const LocalVariable& var) {
+		return std::find_if(LocalVariables.begin(), LocalVariables.end(), [name](const LocalVariable& var) {
 			return var.Name == name;
 		});
 	}

@@ -4,7 +4,7 @@
 
 namespace sam {
 	std::vector<Field>::iterator Structure::FindField(const std::string& name) {
-		return std::find(Fields.begin(), Fields.end(), [name](const Field& field) {
+		return std::find_if(Fields.begin(), Fields.end(), [name](const Field& field) {
 			return field.Name == name;
 		});
 	}
