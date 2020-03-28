@@ -3,6 +3,17 @@
 #include <algorithm>
 
 namespace sam {
+	std::vector<ExternModule>::iterator Assembly::FindDependency(const std::string& path) {
+		return std::find_if(Dependencies.begin(), Dependencies.end(), [path](const ExternModule& dependency) {
+			return dependency.Path == path;
+		});
+	}
+	ExternModule& Assembly::GetDependency(const std::string& path) {
+		return *FindDependency(path);
+	}
+	bool Assembly::HasDependency(const std::string& path) {
+		return FindDependency(path) != Dependencies.end();
+	}
 	std::vector<Structure>::iterator Assembly::FindStructure(const std::string& name) {
 		return std::find_if(Structures.begin(), Structures.end(), [name](const Structure& structure) {
 			return structure.Name == name;

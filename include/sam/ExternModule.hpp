@@ -1,23 +1,20 @@
 #pragma once
 
-#include <sam/ExternModule.hpp>
 #include <sam/Function.hpp>
 #include <sam/Structure.hpp>
-#include <sgn/ByteFile.hpp>
+#include <sgn/Operand.hpp>
 
+#include <string>
 #include <vector>
 
 namespace sam {
-	struct Assembly final {
-		sgn::ByteFile ByteFile;
+	struct ExternModule final {
+		std::string Path;
+		sgn::ExternModuleIndex Index;
 
-		std::vector<ExternModule> Dependencies;
 		std::vector<Structure> Structures;
 		std::vector<Function> Functions;
 
-		std::vector<ExternModule>::iterator FindDependency(const std::string& path);
-		ExternModule& GetDependency(const std::string& path);
-		bool HasDependency(const std::string& path);
 		std::vector<Structure>::iterator FindStructure(const std::string& name);
 		Structure& GetStructure(const std::string& name);
 		bool HasStructure(const std::string& name);
