@@ -138,3 +138,5 @@ proc entrypoint:
 
 	lea array
 	call bubbleSort
+
+; 결과
