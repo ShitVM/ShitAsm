@@ -47,17 +47,21 @@ namespace sam {
 	private:
 		bool FirstPass();
 		bool SecondPass();
+		bool ThirdPass();
 
 		bool IgnoreComment();
+		std::string ReadMnemonic();
 		bool IsValidIdentifier(const std::string& identifier);
 		sgn::Type GetType(const std::string& name);
 		template<typename F>
 		bool IsValidIntegerLiteral(const std::string& literal, std::string& literalMut, F&& function);
+		std::string ReadOperand();
 
 		bool ParseStructure();
 		bool ParseField();
 		bool ParseFunction(bool isProcedure);
 		bool ParseLabel();
+		bool ParseInstruction(Function* function);
 
 		std::optional<Type> ParseType(std::string& line);
 		Number ParseNumber(std::string& line);
@@ -68,5 +72,10 @@ namespace sam {
 		Number ParseDecInteger(const std::string& literal, std::string& literalMut, bool isNegative);
 		Number ParseHexInteger(const std::string& literal, std::string& literalMut, bool isNegative);
 		Number ParseDecimal(const std::string& literal, std::string& literalMut, bool isNegative);
+		
+		std::optional<sgn::FieldIndex> GetField(const std::string& name);
+		std::optional<sgn::FunctionIndex> GetFunction(const std::string& name);
+		std::optional<sgn::LabelIndex> GetLabel(Function* function, const std::string& name);
+		std::optional<sgn::LocalVariableIndex> GetLocalVariable(Function* function, const std::string& name);
 	};
 }

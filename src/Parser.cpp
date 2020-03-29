@@ -28,9 +28,7 @@ namespace sam {
 			if (IgnoreComment()) continue;
 
 			if (m_Line.find(':') != std::string::npos) {
-				std::string mnemonic = ReadBeforeSpace(m_Line);
-				std::transform(mnemonic.begin(), mnemonic.end(), mnemonic.begin(), [](char c) { return static_cast<char>(std::tolower(c)); });
-
+				const std::string mnemonic = ReadMnemonic();
 				if (mnemonic == "struct") {
 					hasError |= !ParseStructure();
 				} else if (mnemonic == "proc" || mnemonic == "func") {
@@ -49,8 +47,7 @@ namespace sam {
 		return !hasError;
 	}
 	bool Parser::SecondPass() {
-		std::size_t structInx = 0;
-		std::size_t fieldInx = 0;
+		std::size_t structInx = 0, fieldInx = 0;
 
 		bool hasError = false;
 
@@ -58,9 +55,7 @@ namespace sam {
 			if (IgnoreComment()) continue;
 
 			if (m_Line.find(':') != std::string::npos) {
-				std::string mnemonic = ReadBeforeSpace(m_Line);
-				std::transform(mnemonic.begin(), mnemonic.end(), mnemonic.begin(), [](char c) { return static_cast<char>(std::tolower(c)); });
-
+				const std::string mnemonic = ReadMnemonic();
 				if (mnemonic == "proc" || mnemonic == "func") {
 					m_CurrentStructure.clear();
 				} else if (mnemonic == "struct") {
@@ -75,6 +70,43 @@ namespace sam {
 
 		return !hasError;
 	}
+	bool Parser::ThirdPass() {
+		std::size_t structInx = 0, fieldInx = 0;
+		std::size_t funcInx = 0, labelInx = 0;
+
+		Function* function = nullptr;
+
+		bool hasError = false;
+
+		while (std::getline(m_ReadStream, m_Line) && ++m_LineNum) {
+			if (IgnoreComment()) continue;
+
+			if (m_Line.find(':') != std::string::npos) {
+				const std::string mnemonic = ReadMnemonic();
+				if (mnemonic == "proc" || mnemonic == "func") {
+					Function& func = m_Assembly.Functions[funcInx++];
+					m_CurrentStructure.clear();
+					m_CurrentFunction = func.Name;
+					labelInx = 0;
+					function = &func;
+				} else if (mnemonic == "struct") {
+					m_CurrentStructure = m_Assembly.Structures[structInx++].Name;
+					m_CurrentFunction.clear();
+					fieldInx = 0;
+				} else {
+					Function& func = m_Assembly.GetFunction(m_CurrentFunction);
+					Label& label = func.Labels[labelInx++];
+					label.Index = func.Builder->AddLabel(label.Name);
+				}
+
+				continue;
+			} else if (!m_CurrentStructure.empty()) continue;
+
+			hasError |= !ParseInstruction(function);
+		}
+
+		return !hasError;
+	}
 
 	bool Parser::IgnoreComment() {
 		if (const auto commentBegin = m_Line.find(';'); commentBegin != std::string::npos) {
@@ -83,6 +115,11 @@ namespace sam {
 
 		Trim(m_Line);
 		return m_Line.empty();
+	}
+	std::string Parser::ReadMnemonic() {
+		std::string mnemonic = ReadBeforeSpace(m_Line);
+		std::transform(mnemonic.begin(), mnemonic.end(), mnemonic.begin(), [](char c) { return static_cast<char>(std::tolower(c)); });
+		return mnemonic;
 	}
 	bool Parser::IsValidIdentifier(const std::string& identifier) {
 		if (std::isdigit(identifier.front())) return false;
@@ -122,6 +159,16 @@ namespace sam {
 			}
 		}
 		return true;
+	}
+	std::string Parser::ReadOperand() {
+		std::string result = ReadBeforeSpace(m_Line); Trim(result);
+		if (!m_Line.empty()) {
+			ERROR << "Unexcepted characters after operand.\n";
+			return "";
+		} else if (result.empty()) {
+			ERROR << "Excepted operand after mnemonic.\n";
+			return "";
+		} else return result;
 	}
 
 	bool Parser::ParseStructure() {
@@ -266,6 +313,288 @@ namespace sam {
 		currentFunction.Labels.push_back(Label{ std::move(name) });
 
 		return !hasError;
+	}
+	bool Parser::ParseInstruction(Function* function) {
+		const std::string mnemonic = ReadMnemonic();
+		switch (CRC32(mnemonic)) {
+		case "nop"_h: function->Builder->Nop(); break;
+
+		case "push"_h: {
+			const std::string op = ReadOperand();
+			if (op.empty()) return false;
+
+			if (op.front() == '+' || op.front() == '-' || std::isdigit(op.front())) {
+				const auto literal = ParseNumber(m_Line);
+				if (std::holds_alternative<bool>(literal)) return false;
+				else if (std::holds_alternative<std::uint32_t>(literal)) {
+					const auto inx = m_Assembly.ByteFile.AddIntConstant(std::get<std::uint32_t>(literal));
+					function->Builder->Push(inx);
+				} else if (std::holds_alternative<std::uint64_t>(literal)) {
+					const auto inx = m_Assembly.ByteFile.AddLongConstant(std::get<std::uint64_t>(literal));
+					function->Builder->Push(inx);
+				} else if (std::holds_alternative<double>(literal)) {
+					const auto inx = m_Assembly.ByteFile.AddDoubleConstant(std::get<double>(literal));
+					function->Builder->Push(inx);
+				}
+			} else {
+				const auto structure = m_Assembly.FindStructure(op);
+				if (structure == m_Assembly.Structures.end()) {
+					ERROR << "Nonexistent structure name '" << op << "'.\n";
+					return false;
+				}
+				function->Builder->Push(structure->Index);
+			}
+
+			break;
+		}
+		case "pop"_h: function->Builder->Pop(); break;
+		case "load"_h: {
+			const std::string op = ReadOperand();
+			if (op.empty()) return false;
+
+			const auto var = GetLocalVariable(function, op);
+			if (!var.has_value()) {
+				ERROR << "Nonexistent local variable '" << op << "'.\n";
+				return false;
+			}
+
+			function->Builder->Load(*var);
+			break;
+		}
+		case "store"_h: {
+			const std::string op = ReadOperand();
+			if (op.empty()) return false;
+
+			const auto var = GetLocalVariable(function, op);
+			if (var.has_value()) {
+				function->Builder->Store(*var);
+			} else {
+				LocalVariable newVar;
+				newVar.Name = op;
+				newVar.Index = function->Builder->AddLocalVariable();
+				function->LocalVariables.push_back(newVar);
+
+				function->Builder->Store(newVar.Index);
+			}
+
+			break;
+		}
+		case "lea"_h: {
+			const std::string op = ReadOperand();
+			if (op.empty()) return false;
+
+			const auto var = GetLocalVariable(function, op);
+			if (!var.has_value()) {
+				ERROR << "Nonexistent local variable '" << op << "'.\n";
+				return false;
+			}
+
+			function->Builder->Lea(*var);
+			break;
+		}
+		case "flea"_h: {
+			const std::string op = ReadOperand();
+			if (op.empty()) return false;
+
+			const auto field = GetField(op);
+			if (!field.has_value()) return false;
+
+			function->Builder->FLea(*field);
+			break;
+		}
+		case "tload"_h: function->Builder->TLoad(); break;
+		case "tstore"_h: function->Builder->TStore(); break;
+		case "copy"_h: function->Builder->Copy(); break;
+		case "swap"_h: function->Builder->Swap(); break;
+
+		case "add"_h: function->Builder->Add(); break;
+		case "sub"_h: function->Builder->Sub(); break;
+		case "mul"_h: function->Builder->Mul(); break;
+		case "imul"_h: function->Builder->IMul(); break;
+		case "div"_h: function->Builder->Div(); break;
+		case "idiv"_h: function->Builder->IDiv(); break;
+		case "mod"_h: function->Builder->Mod(); break;
+		case "imod"_h: function->Builder->IMod(); break;
+		case "neg"_h: function->Builder->Neg(); break;
+		case "inc"_h: function->Builder->Inc(); break;
+		case "dec"_h: function->Builder->Dec(); break;
+
+		case "and"_h: function->Builder->And(); break;
+		case "or"_h: function->Builder->Or(); break;
+		case "xor"_h: function->Builder->Xor(); break;
+		case "not"_h: function->Builder->Not(); break;
+		case "shl"_h: function->Builder->Shl(); break;
+		case "sal"_h: function->Builder->Sal(); break;
+		case "shr"_h: function->Builder->Shr(); break;
+		case "sar"_h: function->Builder->Sar(); break;
+
+		case "cmp"_h: function->Builder->Cmp(); break;
+		case "icmp"_h: function->Builder->ICmp(); break;
+		case "jmp"_h: {
+			const std::string op = ReadOperand();
+			if (op.empty()) return false;
+
+			const auto label = GetLabel(function, op);
+			if (!label.has_value()) return false;
+
+			function->Builder->Jmp(*label);
+			break;
+		}
+		case "je"_h: {
+			const std::string op = ReadOperand();
+			if (op.empty()) return false;
+
+			const auto label = GetLabel(function, op);
+			if (!label.has_value()) return false;
+
+			function->Builder->Je(*label);
+			break;
+		}
+		case "jne"_h: {
+			const std::string op = ReadOperand();
+			if (op.empty()) return false;
+
+			const auto label = GetLabel(function, op);
+			if (!label.has_value()) return false;
+
+			function->Builder->Jne(*label);
+			break;
+		}
+		case "ja"_h: {
+			const std::string op = ReadOperand();
+			if (op.empty()) return false;
+
+			const auto label = GetLabel(function, op);
+			if (!label.has_value()) return false;
+
+			function->Builder->Ja(*label);
+			break;
+		}
+		case "jae"_h: {
+			const std::string op = ReadOperand();
+			if (op.empty()) return false;
+
+			const auto label = GetLabel(function, op);
+			if (!label.has_value()) return false;
+
+			function->Builder->Jae(*label);
+			break;
+		}
+		case "jb"_h: {
+			const std::string op = ReadOperand();
+			if (op.empty()) return false;
+
+			const auto label = GetLabel(function, op);
+			if (!label.has_value()) return false;
+
+			function->Builder->Jb(*label);
+			break;
+		}
+		case "jbe"_h: {
+			const std::string op = ReadOperand();
+			if (op.empty()) return false;
+
+			const auto label = GetLabel(function, op);
+			if (!label.has_value()) return false;
+
+			function->Builder->Jbe(*label);
+			break;
+		}
+		case "call"_h: {
+			const std::string op = ReadOperand();
+			if (op.empty()) return false;
+
+			const auto func = GetFunction(op);
+			if (!func.has_value()) return false;
+
+			function->Builder->Call(*func);
+			break;
+		}
+		case "ret"_h: function->Builder->Ret(); break;
+
+		case "toi"_h: function->Builder->ToI(); break;
+		case "tol"_h: function->Builder->ToL(); break;
+		case "tod"_h: function->Builder->ToD(); break;
+		case "top"_h: function->Builder->ToP(); break;
+
+		case "null"_h: function->Builder->Null(); break;
+		case "new"_h: {
+			const auto type = ParseType(m_Line);
+			if (!type) return false;
+			else if (type->ElementType == nullptr) {
+				ERROR << "Nonexistent type name '" << type->ElementTypeName << "'.\n";
+				return false;
+			}
+
+			function->Builder->New(m_Assembly.ByteFile.GetTypeIndex(type->ElementType));
+			break;
+		}
+		case "delete"_h: function->Builder->Delete(); break;
+		case "gcnull"_h: function->Builder->GCNull(); break;
+		case "gcnew"_h: {
+			const auto type = ParseType(m_Line);
+			if (!type) return false;
+			else if (type->ElementType == nullptr) {
+				ERROR << "Nonexistent type name '" << type->ElementTypeName << "'.\n";
+				return false;
+			}
+
+			function->Builder->GCNew(m_Assembly.ByteFile.GetTypeIndex(type->ElementType));
+			break;
+		}
+
+		case "apush"_h: {
+			const auto type = ParseType(m_Line);
+			if (!type) return false;
+			else if (type->ElementType == nullptr) {
+				ERROR << "Nonexistent type name '" << type->ElementTypeName << "'.\n";
+				return false;
+			} else if (type->ElementCount) {
+				ERROR << "Array's length cannot be used here.\n";
+				return false;
+			}
+
+			function->Builder->APush(m_Assembly.ByteFile.MakeArray(m_Assembly.ByteFile.GetTypeIndex(type->ElementType)));
+			break;
+		}
+		case "anew"_h: {
+			const auto type = ParseType(m_Line);
+			if (!type) return false;
+			else if (type->ElementType == nullptr) {
+				ERROR << "Nonexistent type name '" << type->ElementTypeName << "'.\n";
+				return false;
+			} else if (type->ElementCount) {
+				ERROR << "Array's length cannot be used here.\n";
+				return false;
+			}
+
+			function->Builder->ANew(m_Assembly.ByteFile.MakeArray(m_Assembly.ByteFile.GetTypeIndex(type->ElementType)));
+			break;
+		}
+		case "agcnew"_h: {
+			const auto type = ParseType(m_Line);
+			if (!type) return false;
+			else if (type->ElementType == nullptr) {
+				ERROR << "Nonexistent type name '" << type->ElementTypeName << "'.\n";
+				return false;
+			} else if (type->ElementCount) {
+				ERROR << "Array's length cannot be used here.\n";
+				return false;
+			}
+
+			function->Builder->AGCNew(m_Assembly.ByteFile.MakeArray(m_Assembly.ByteFile.GetTypeIndex(type->ElementType)));
+			break;
+		}
+		case "alea"_h: function->Builder->ALea(); break;
+		case "count"_h: function->Builder->Count(); break;
+
+		default: {
+			ERROR << "Unrecognized mnemonic '" << mnemonic << "'.\n";
+			return false;
+		}
+		}
+
+		return true;
 	}
 
 	std::optional<Type> Parser::ParseType(std::string& line) {
@@ -419,5 +748,49 @@ namespace sam {
 		const double abs = std::stod(literalMut);
 		if (isNegative) return -abs;
 		else return abs;
+	}
+
+	std::optional<sgn::FieldIndex> Parser::GetField(const std::string& name) {
+		const std::size_t dot = name.find('.');
+		if (dot == std::string::npos || name.find('.', dot + 1) != std::string::npos) {
+			ERROR << "Invalid field name '" << name << "'.\n";
+			return std::nullopt;
+		}
+
+		const std::string structName = name.substr(0, dot);
+		const std::string fieldName = name.substr(dot + 1);
+
+		const auto structIter = m_Assembly.FindStructure(name);
+		if (structIter == m_Assembly.Structures.end()) {
+			ERROR << "Nonexistent structure name '" << structName << "'.\n";
+			return std::nullopt;
+		}
+
+		const auto fieldIter = structIter->FindField(fieldName);
+		if (fieldIter == structIter->Fields.end()) {
+			ERROR << "Nonexistent field name '" << fieldName << "'.\n";
+			return std::nullopt;
+		}
+
+		return fieldIter->Index;
+	}
+	std::optional<sgn::FunctionIndex> Parser::GetFunction(const std::string& name) {
+		const auto iter = m_Assembly.FindFunction(name);
+		if (iter == m_Assembly.Functions.end()) {
+			ERROR << "Nonexistent function name '" << name << "'.\n";
+			return std::nullopt;
+		} else return iter->Index;
+	}
+	std::optional<sgn::LabelIndex> Parser::GetLabel(Function* function, const std::string& name) {
+		const auto iter = function->FindLabel(name);
+		if (iter == function->Labels.end()) {
+			ERROR << "Nonexistent label name '" << name << "'.\n";
+			return std::nullopt;
+		} else return iter->Index;
+	}
+	std::optional<sgn::LocalVariableIndex> Parser::GetLocalVariable(Function* function, const std::string& name) {
+		const auto iter = function->FindLocalVariable(name);
+		if (iter == function->LocalVariables.end()) return std::nullopt;
+		else return iter->Index;
 	}
 }
