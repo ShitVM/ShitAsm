@@ -65,7 +65,7 @@ namespace sam {
 		std::string ReadOperand();
 
 		bool ParseStructure();
-		bool ParseField();
+		bool ParseField(Structure* structure);
 		bool ParseFunction(bool isProcedure);
 		bool ParseLabel();
 		bool ParseInstruction(Function* function);

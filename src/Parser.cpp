@@ -51,12 +51,14 @@ namespace sam {
 			if (IgnoreComment()) continue;
 
 			if (m_Line.find(':') != std::string::npos) {
+				const std::string lineBackup = m_Line;
 				const std::string mnemonic = ReadMnemonic();
 				if (mnemonic == "struct") {
 					hasError |= !ParseStructure();
 				} else if (mnemonic == "proc" || mnemonic == "func") {
 					hasError |= !ParseFunction(mnemonic == "proc");
 				} else {
+					m_Line = lineBackup;
 					hasError |= !ParseLabel();
 				}
 			}
@@ -74,6 +76,8 @@ namespace sam {
 	bool Parser::SecondPass() {
 		std::size_t structInx = 0, fieldInx = 0;
 
+		Structure* currentStructure = nullptr;
+
 		bool hasError = false;
 
 		while (std::getline(m_ReadStream, m_Line) && ++m_LineNum) {
@@ -84,13 +88,15 @@ namespace sam {
 				if (mnemonic == "proc" || mnemonic == "func") {
 					m_CurrentStructure.clear();
 				} else if (mnemonic == "struct") {
-					m_CurrentStructure = m_Assembly.Structures[structInx++].Name;
+					Structure& structure = m_Assembly.Structures[structInx++];
+					m_CurrentStructure = structure.Name;
 					fieldInx = 0;
+					currentStructure = &structure;
 				}
 				continue;
 			} else if (m_CurrentStructure.empty()) continue;
 
-			hasError |= !ParseField();
+			hasError |= !ParseField(currentStructure);
 		}
 
 		return !hasError;
@@ -99,7 +105,7 @@ namespace sam {
 		std::size_t structInx = 0, fieldInx = 0;
 		std::size_t funcInx = 0, labelInx = 0;
 
-		Function* function = nullptr;
+		Function* currentFunction = nullptr;
 
 		bool hasError = false;
 
@@ -113,7 +119,7 @@ namespace sam {
 					m_CurrentStructure.clear();
 					m_CurrentFunction = func.Name;
 					labelInx = 0;
-					function = &func;
+					currentFunction = &func;
 				} else if (mnemonic == "struct") {
 					m_CurrentStructure = m_Assembly.Structures[structInx++].Name;
 					m_CurrentFunction.clear();
@@ -127,7 +133,7 @@ namespace sam {
 				continue;
 			} else if (!m_CurrentStructure.empty()) continue;
 
-			hasError |= !ParseInstruction(function);
+			hasError |= !ParseInstruction(currentFunction);
 		}
 
 		return !hasError;
@@ -255,12 +261,12 @@ namespace sam {
 
 		return !hasError;
 	}
-	bool Parser::ParseField() {
+	bool Parser::ParseField(Structure* structure) {
 		bool hasError = false;
 
 		const auto type = ParseType(m_Line);
 		if (!type) return false;
-		else if (!type->ElementCount || *type->ElementCount == 0) {
+		else if (type->ElementCount && *type->ElementCount == 0) {
 			ERROR << "Array in structure must have length.\n";
 			hasError = true;
 		}
@@ -274,9 +280,10 @@ namespace sam {
 			return false;
 		}
 
-		sgn::StructureIndex structIndex = m_Assembly.GetStructure(m_CurrentStructure).Index;
-		sgn::StructureInfo* const structure = m_Assembly.ByteFile.GetStructureInfo(structIndex);
-		structure->AddField(type->ElementType, type->ElementCount.value_or(0));
+		const sgn::StructureIndex structIndex = m_Assembly.GetStructure(m_CurrentStructure).Index;
+		sgn::StructureInfo* const structureInfo = m_Assembly.ByteFile.GetStructureInfo(structIndex);
+		const sgn::FieldIndex index = structureInfo->AddField(type->ElementType, type->ElementCount.value_or(0));
+		structure->Fields.push_back(Field{ std::move(name), index });
 
 		return !hasError;
 	}
@@ -340,7 +347,7 @@ namespace sam {
 			hasError = true;
 		}
 
-		sgn::FunctionIndex index;
+		sgn::FunctionIndex index = sgn::FunctionIndex::OperandIndex/*Dummy*/;
 		if (name != "entrypoint") {
 			index = m_Assembly.ByteFile.AddFunction(static_cast<std::uint16_t>(params.size()), !isProcedure);
 		}
@@ -376,11 +383,11 @@ namespace sam {
 		case "nop"_h: function->Builder->Nop(); break;
 
 		case "push"_h: {
-			const std::string op = ReadOperand();
+			std::string op = ReadOperand();
 			if (op.empty()) return false;
 
 			if (op.front() == '+' || op.front() == '-' || std::isdigit(op.front())) {
-				const auto literal = ParseNumber(m_Line);
+				const auto literal = ParseNumber(op);
 				if (std::holds_alternative<bool>(literal)) return false;
 				else if (std::holds_alternative<std::uint32_t>(literal)) {
 					const auto inx = m_Assembly.ByteFile.AddIntConstant(std::get<std::uint32_t>(literal));
@@ -675,8 +682,8 @@ namespace sam {
 		std::string countStr = ReadBeforeChar(line, ']'); countStr.erase(countStr.begin()); Trim(countStr);
 
 		const auto countVar = ParseNumber(countStr);
-		if (std::holds_alternative<bool>(countVar) && std::get<bool>(countVar)) {
-			hasError = true;
+		if (std::holds_alternative<bool>(countVar)) {
+			hasError = std::get<bool>(countVar);
 		} else if (std::holds_alternative<double>(countVar)) {
 			ERROR << "Array's length must be integer.\n";
 			count = static_cast<std::uint64_t>(std::get<double>(countVar));
@@ -748,26 +755,30 @@ namespace sam {
 			return false;
 		} else if (!IsValidIntegerLiteral(literal, literalMut, std::forward<F>(function))) return false;
 
-		const unsigned long long abs = std::stoull(literalMut, nullptr, base);
 		if (isNegative) {
+			const long long abs = std::stoll(literalMut, nullptr, base);
 			if (literalMut.back() == 'i') {
-				if (abs > -std::numeric_limits<std::int32_t>::min()) {
+				if (abs > -static_cast<long long>(std::numeric_limits<std::int32_t>::min())) {
 					WARNING << "Overflowed integer literal '" << literalMut << "'.\n";
 				}
-				return static_cast<std::uint32_t>(-abs);
+				return static_cast<std::uint32_t>(static_cast<std::int32_t>(-abs));
 			} else {
-				if (abs > -std::numeric_limits<std::int64_t>::min()) {
-					WARNING << "Overflowed integer literal '" << literalMut << "'.\n";
-				}
-				return static_cast<std::uint64_t>(-abs);
+				if (abs <= -static_cast<long long>(std::numeric_limits<std::int32_t>::min()) &&
+					literalMut.back() != 'l') return static_cast<std::uint32_t>(static_cast<std::int32_t>(-abs));
+				else return static_cast<std::uint64_t>(-abs);
 			}
 		} else {
+			const unsigned long long abs = std::stoull(literalMut, nullptr, base);
 			if (literalMut.back() == 'i') {
-				if (abs > std::numeric_limits<std::int32_t>::max()) {
+				if (abs > static_cast<unsigned long long>(std::numeric_limits<std::uint32_t>::max())) {
 					WARNING << "Overflowed integer literal '" << literalMut << "'.\n";
 				}
 				return static_cast<std::uint32_t>(abs);
-			} else return static_cast<std::uint64_t>(abs);
+			} else {
+				if (abs <= static_cast<unsigned long long>(std::numeric_limits<std::uint32_t>::max()) &&
+					literalMut.back() != 'l') return static_cast<std::uint32_t>(abs);
+				else return static_cast<std::uint64_t>(abs);
+			}
 		}
 	}
 	Parser::Number Parser::ParseBinInteger(const std::string& literal, std::string& literalMut, bool isNegative) {
@@ -816,7 +827,7 @@ namespace sam {
 		const std::string structName = name.substr(0, dot);
 		const std::string fieldName = name.substr(dot + 1);
 
-		const auto structIter = m_Assembly.FindStructure(name);
+		const auto structIter = m_Assembly.FindStructure(structName);
 		if (structIter == m_Assembly.Structures.end()) {
 			ERROR << "Nonexistent structure name '" << structName << "'.\n";
 			return std::nullopt;
