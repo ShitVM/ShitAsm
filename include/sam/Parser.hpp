@@ -44,10 +44,17 @@ namespace sam {
 		bool operator==(const Parser&) = delete;
 		bool operator!=(const Parser&) = delete;
 
+	public:
+		bool Parse(const std::string& path);
+		void Generate(const std::string& path);
+
 	private:
 		bool FirstPass();
 		bool SecondPass();
 		bool ThirdPass();
+		
+		void ResetState();
+		void GenerateBuilders();
 
 		bool IgnoreComment();
 		std::string ReadMnemonic();
@@ -72,7 +79,7 @@ namespace sam {
 		Number ParseDecInteger(const std::string& literal, std::string& literalMut, bool isNegative);
 		Number ParseHexInteger(const std::string& literal, std::string& literalMut, bool isNegative);
 		Number ParseDecimal(const std::string& literal, std::string& literalMut, bool isNegative);
-		
+
 		std::optional<sgn::FieldIndex> GetField(const std::string& name);
 		std::optional<sgn::FunctionIndex> GetFunction(const std::string& name);
 		std::optional<sgn::LabelIndex> GetLabel(Function* function, const std::string& name);

@@ -3,6 +3,7 @@
 #include <sam/Function.hpp>
 #include <sam/String.hpp>
 #include <sgn/ByteFile.hpp>
+#include <sgn/Generator.hpp>
 #include <sgn/Structure.hpp>
 #include <svm/Type.hpp>
 
@@ -16,6 +17,28 @@
 namespace sam {
 	Parser::Parser(Assembly& assembly, std::ostream& errorStream) noexcept
 		: m_Assembly(assembly), m_ErrorStream(errorStream) {}
+
+	bool Parser::Parse(const std::string& path) {
+		m_ReadStream.open(path);
+		if (!m_ReadStream) {
+			m_ErrorStream << "Error: Failed to open '" << path << "' file.\n";
+			return false;
+		}
+
+		if (!FirstPass()) return false;
+		ResetState();
+
+		if (!SecondPass()) return false;
+		ResetState();
+
+		if (!ThirdPass()) return false;
+
+		return true;
+	}
+	void Parser::Generate(const std::string& path) {
+		sgn::Generator gen(m_Assembly.ByteFile);
+		gen.Generate(path);
+	}
 
 #define INFO m_ErrorStream << "Info: Line " << m_LineNum << ", "
 #define WARNING m_ErrorStream << "Warning: Line " << m_LineNum << ", "
@@ -43,6 +66,8 @@ namespace sam {
 			m_ErrorStream << "Error: There is no 'entrypoint' procedure.\n";
 			hasError = true;
 		}
+
+		GenerateBuilders();
 
 		return !hasError;
 	}
@@ -106,6 +131,34 @@ namespace sam {
 		}
 
 		return !hasError;
+	}
+
+	void Parser::ResetState() {
+		m_ReadStream.clear();
+		m_ReadStream.seekg(0, std::ifstream::beg);
+
+		m_CurrentStructure.clear();
+		m_CurrentFunction.clear();
+
+		m_LineNum = 0;
+	}
+	void Parser::GenerateBuilders() {
+		for (auto& func : m_Assembly.Functions) {
+			if (func.Name == "entrypoint") {
+				func.Builder = std::make_unique<sgn::Builder>(m_Assembly.ByteFile, m_Assembly.ByteFile.GetEntrypoint());
+			} else {
+				func.Builder = std::make_unique<sgn::Builder>(m_Assembly.ByteFile, func.Index);
+			}
+
+			for (auto& label : func.Labels) {
+				label.Index = func.Builder->ReserveLabel(label.Name);
+			}
+
+			std::uint32_t i = 0;
+			for (auto& param : func.LocalVariables) {
+				param.Index = func.Builder->GetArgument(i++);
+			}
+		}
 	}
 
 	bool Parser::IgnoreComment() {
@@ -287,7 +340,10 @@ namespace sam {
 			hasError = true;
 		}
 
-		const sgn::FunctionIndex index = m_Assembly.ByteFile.AddFunction(static_cast<std::uint16_t>(params.size()), !isProcedure);
+		sgn::FunctionIndex index;
+		if (name != "entrypoint") {
+			index = m_Assembly.ByteFile.AddFunction(static_cast<std::uint16_t>(params.size()), !isProcedure);
+		}
 		m_Assembly.Functions.push_back(Function{ nullptr, std::move(name), index, {}, std::move(params) });
 
 		return !hasError;
