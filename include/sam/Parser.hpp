@@ -26,6 +26,7 @@ namespace sam {
 	private:
 		Assembly& m_Assembly;
 		std::ifstream m_ReadStream;
+		std::string m_ReadPath;
 		std::ostream& m_ErrorStream;
 
 		std::string m_CurrentStructure;

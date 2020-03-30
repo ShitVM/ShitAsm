@@ -6,6 +6,7 @@
 #include <sgn/Generator.hpp>
 #include <sgn/Structure.hpp>
 #include <svm/Type.hpp>
+#include <svm/detail/FileSystem.hpp>
 
 #include <algorithm>
 #include <cctype>
@@ -19,9 +20,11 @@ namespace sam {
 		: m_Assembly(assembly), m_ErrorStream(errorStream) {}
 
 	bool Parser::Parse(const std::string& path) {
-		m_ReadStream.open(path);
+		m_ReadPath = svm::detail::fs::absolute(path).string();
+
+		m_ReadStream.open(m_ReadPath);
 		if (!m_ReadStream) {
-			m_ErrorStream << "Error: Failed to open '" << path << "' file.\n";
+			m_ErrorStream << "Error: Failed to open '" << m_ReadPath << "' file.\n";
 			return false;
 		}
 
@@ -40,9 +43,10 @@ namespace sam {
 		gen.Generate(path);
 	}
 
-#define INFO m_ErrorStream << "Info: Line " << m_LineNum << ", "
-#define WARNING m_ErrorStream << "Warning: Line " << m_LineNum << ", "
-#define ERROR m_ErrorStream << "Error: Line " << m_LineNum << ", "
+#define MESSAGEBASE m_ErrorStream << "In file '" << m_ReadPath << "':\n    "
+#define INFO MESSAGEBASE << "Info: Line " << m_LineNum << ", "
+#define WARNING MESSAGEBASE << "Warning: Line " << m_LineNum << ", "
+#define ERROR MESSAGEBASE << "Error: Line " << m_LineNum << ", "
 
 	bool Parser::FirstPass() {
 		bool hasError = false;
@@ -65,7 +69,7 @@ namespace sam {
 		}
 
 		if (!m_Assembly.HasFunction("entrypoint")) {
-			m_ErrorStream << "Error: There is no 'entrypoint' procedure.\n";
+			MESSAGEBASE << "Error: There is no 'entrypoint' procedure.\n";
 			hasError = true;
 		}
 
@@ -844,7 +848,10 @@ namespace sam {
 	std::optional<sgn::FunctionIndex> Parser::GetFunction(const std::string& name) {
 		const auto iter = m_Assembly.FindFunction(name);
 		if (iter == m_Assembly.Functions.end()) {
-			ERROR << "Nonexistent function name '" << name << "'.\n";
+			ERROR << "Nonexistent function or procedure name '" << name << "'.\n";
+			return std::nullopt;
+		} else if (name == "entrypoint") {
+			ERROR << "Noncallable function or procedure 'entrypoint'.\n";
 			return std::nullopt;
 		} else return iter->Index;
 	}
