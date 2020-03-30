@@ -241,7 +241,10 @@ namespace sam {
 		m_CurrentStructure = name;
 		m_CurrentFunction.clear();
 
-		if (!IsValidIdentifier(name)) {
+		if (name.empty()) {
+			ERROR << "Required structure name.\n";
+			return false;
+		} else if (!IsValidIdentifier(name)) {
 			ERROR << "Invalid structure name '" << name << "'.\n";
 			hasError = true;
 		} else if (m_Assembly.HasStructure(name)) {
@@ -276,7 +279,10 @@ namespace sam {
 		}
 
 		std::string name = ReadBeforeSpecialChar(m_Line); Trim(name);
-		if (!IsValidIdentifier(name)) {
+		if (name.empty()) {
+			ERROR << "Required field name.\n";
+			return false;
+		} else if (!IsValidIdentifier(name)) {
 			ERROR << "Invalid field name '" << name << "'.\n";
 			hasError = true;
 		} else if (type->ElementType == nullptr) {
@@ -298,7 +304,10 @@ namespace sam {
 		m_CurrentStructure.clear();
 		m_CurrentFunction = name;
 
-		if (!IsValidIdentifier(name)) {
+		if (name.empty()) {
+			ERROR << "Required function or procedure name.\n";
+			return false;
+		} else if (!IsValidIdentifier(name)) {
 			ERROR << "Invalid function or procedure name '" << name << "'.\n";
 			hasError = true;
 		} else if (m_Assembly.HasFunction(name)) {
@@ -369,7 +378,10 @@ namespace sam {
 		bool hasError = false;
 
 		std::string name = ReadBeforeSpecialChar(m_Line); Trim(name);
-		if (!IsValidIdentifier(name)) {
+		if (name.empty()) {
+			ERROR << "Required label name.\n";
+			return false;
+		} else if (!IsValidIdentifier(name)) {
 			ERROR << "Invalid label name '" << name << "'.\n";
 			hasError = true;
 		} else if (currentFunction.HasLabel(name)) {
@@ -591,6 +603,10 @@ namespace sam {
 			else if (type->ElementType == nullptr) {
 				ERROR << "Nonexistent type name '" << type->ElementTypeName << "'.\n";
 				return false;
+			} else if (type->ElementCount) {
+				ERROR << "Array cannot be used here.\n";
+				INFO << "Use 'anew' mnemonic instead.\n";
+				return false;
 			}
 
 			function->Builder->New(m_Assembly.ByteFile.GetTypeIndex(type->ElementType));
@@ -604,6 +620,10 @@ namespace sam {
 			else if (type->ElementType == nullptr) {
 				ERROR << "Nonexistent type name '" << type->ElementTypeName << "'.\n";
 				return false;
+			} else if (type->ElementCount) {
+				ERROR << "Array cannot be used here.\n";
+				INFO << "Use 'agcnew' mnemonic instead.\n";
+				return false;
 			}
 
 			function->Builder->GCNew(m_Assembly.ByteFile.GetTypeIndex(type->ElementType));
@@ -616,7 +636,11 @@ namespace sam {
 			else if (type->ElementType == nullptr) {
 				ERROR << "Nonexistent type name '" << type->ElementTypeName << "'.\n";
 				return false;
-			} else if (type->ElementCount) {
+			} else if (!type->ElementCount) {
+				ERROR << "Only array can be used here.\n";
+				INFO << "Use 'push' mnemonic instead.\n";
+				return false;
+			} else if (*type->ElementCount != 0) {
 				ERROR << "Array's length cannot be used here.\n";
 				return false;
 			}
@@ -630,7 +654,11 @@ namespace sam {
 			else if (type->ElementType == nullptr) {
 				ERROR << "Nonexistent type name '" << type->ElementTypeName << "'.\n";
 				return false;
-			} else if (type->ElementCount) {
+			} else if (!type->ElementCount) {
+				ERROR << "Only array can be used here.\n";
+				INFO << "Use 'new' mnemonic instead.\n";
+				return false;
+			} else if (*type->ElementCount != 0) {
 				ERROR << "Array's length cannot be used here.\n";
 				return false;
 			}
@@ -644,7 +672,11 @@ namespace sam {
 			else if (type->ElementType == nullptr) {
 				ERROR << "Nonexistent type name '" << type->ElementTypeName << "'.\n";
 				return false;
-			} else if (type->ElementCount) {
+			} else if (!type->ElementCount) {
+				ERROR << "Only array can be used here.\n";
+				INFO << "Use 'gcnew' mnemonic instead.\n";
+				return false;
+			} else if (*type->ElementCount != 0) {
 				ERROR << "Array's length cannot be used here.\n";
 				return false;
 			}
@@ -687,6 +719,7 @@ namespace sam {
 
 		const auto countVar = ParseNumber(countStr);
 		if (std::holds_alternative<bool>(countVar)) {
+			count = 0;
 			hasError = std::get<bool>(countVar);
 		} else if (std::holds_alternative<double>(countVar)) {
 			ERROR << "Array's length must be integer.\n";
@@ -696,6 +729,10 @@ namespace sam {
 			std::visit([&count](auto v) mutable {
 				count = static_cast<std::uint64_t>(v);
 			}, countVar);
+			if (count == 0) {
+				ERROR << "Array's length cannot be zero.\n";
+				hasError = true;
+			}
 		}
 
 		if (line.empty()) {
@@ -713,6 +750,9 @@ namespace sam {
 			}
 			hasError = true;
 		}
+
+		line.erase(line.begin());
+		Trim(line);
 
 		if (hasError) return std::nullopt;
 		else return Type{ type, std::move(typeName), count };
