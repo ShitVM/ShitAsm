@@ -98,6 +98,6 @@ namespace sam {
 		void LexOctInteger(std::string_view& literal);
 		void LexDecInteger(std::string_view& literal);
 		void LexHexInteger(std::string_view& literal);
-		void LexDecimal(std::string_view& literal);
+		void LexDecimal(std::string_view& literal, std::size_t dot);
 	};
 }

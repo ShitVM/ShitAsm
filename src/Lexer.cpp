@@ -118,35 +118,36 @@ namespace sam {
 		return { m_Line.data() + m_Column, end - m_Column };
 	}
 	void Lexer::LexInteger(std::string_view& literal, std::size_t digitBegin, TokenType type, int base, bool(*isValidDigit)(char) noexcept) {
+		if (const std::size_t dot = literal.find('.'); dot != std::string_view::npos) {
+			if (base != 8 && base != 10) {
+				ERROR << "Invalid integer literal '" << literal << "'.\n";
+			} else {
+				LexDecimal(literal, dot);
+			}
+			return;
+		}
+
 		std::size_t digitEnd = digitBegin;
-		bool prevComma = 0;
+		bool prevComma = true;
 		while (digitEnd < literal.size()) {
-			const char byte = literal[digitEnd];
+			const char byte = literal[digitEnd++];
 			if (byte == ',') {
 				if (prevComma) {
 					ERROR << "Invalid integer literal '" << literal << "'.\n";
 					return;
 				}
 				prevComma = true;
-				goto increase;
-			} else if (byte == '.') {
-				if (base == 8 || base == 10) {
-					LexDecimal(literal);
-				} else {
-					ERROR << "Invalid integer literal '" << literal << "'.\n";
-				}
-				return;
+				continue;
 			} else if (!isValidDigit(byte)) {
-				if (std::isdigit(byte)) {
-					ERROR << "Invalid integer literal '" << literal << "'.\n";
-					return;
-				}
+				--digitEnd;
 				break;
 			}
 
 			prevComma = false;
-		increase:
-			++digitEnd;
+		}
+		if (literal[digitEnd - 1] == ',') {
+			ERROR << "Invalid integer literal '" << literal << "'.\n";
+			return;
 		}
 
 		std::string digits;
@@ -175,13 +176,43 @@ namespace sam {
 		});
 	}
 	void Lexer::LexHexInteger(std::string_view& literal) {
-		LexInteger(literal, 2, TokenType::HexInteger, 2, [](char c) noexcept {
+		LexInteger(literal, 2, TokenType::HexInteger, 16, [](char c) noexcept {
 			return std::isdigit(c) ||
 				'A' <= c && c <= 'F' ||
 				'a' <= c && c <= 'f';
 		});
 	}
-	void Lexer::LexDecimal(std::string_view& literal) {
-		// TODO
+	void Lexer::LexDecimal(std::string_view& literal, std::size_t dot) {
+		if (literal.find('.', dot + 1) != std::string_view::npos) {
+			ERROR << "Invalid decimal literal '" << literal << "'.\n";
+			return;
+		}
+
+		std::size_t digitEnd = 0;
+		std::string digits;
+		while (digitEnd < literal.size()) {
+			const char byte = literal[digitEnd++];
+			if (std::isdigit(byte)) {
+				digits.push_back(byte);
+			} else if (byte == ',' || byte == '.') {
+				if (digits.empty() || digits.back() == ',' || digits.back() == '.') {
+					ERROR << "Invalid decimal literal '" << literal << "'.\n";
+					return;
+				} else if (byte == '.') {
+					digits.push_back(byte);
+				}
+			} else {
+				--digitEnd;
+				break;
+			}
+		}
+		if (const char back = literal[digitEnd - 1]; back == ',' || back == '.') {
+			ERROR << "Invalid decimal literal '" << literal << "'.\n";
+			return;
+		}
+
+		const double value = std::stod(digits);
+		const std::string_view suffix = literal.substr(digitEnd);
+		m_Result.emplace_back(std::string(literal), std::string(suffix), value, TokenType::Decimal, m_LineNum);
 	}
 }
