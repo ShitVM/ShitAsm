@@ -100,5 +100,7 @@ namespace sam {
 		void LexDecimal(std::string_view& literal, std::size_t dot);
 
 		void LexText(char firstByte);
+
+		void LexIdentifier();
 	};
 }

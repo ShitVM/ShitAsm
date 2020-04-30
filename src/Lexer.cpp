@@ -40,7 +40,7 @@ namespace sam {
 				} else if (IsSpecial(firstByte)) {
 					LexSpecial();
 				} else {
-					m_Column += GetByteCount(firstByte);
+					LexIdentifier();
 				}
 			}
 		}
@@ -250,5 +250,18 @@ namespace sam {
 
 		m_Result.emplace_back(m_Line.substr(m_Column, textEnd + 1), text, firstByte == '"' ? TokenType::String : TokenType::Character, m_LineNum);
 		m_Column = textEnd + 1;
+	}
+
+	void Lexer::LexIdentifier() {
+		std::size_t end = m_Column;
+		char byte;
+		while ((byte = GetByte(end)) && !std::isspace(byte)) {
+			if (IsSpecial(byte)) break;
+			++end;
+		}
+
+		const std::string identifier = m_Line.substr(m_Column, end - m_Column);
+		m_Result.emplace_back(identifier, identifier, TokenType::Identifier, m_LineNum);
+		m_Column += identifier.size();
 	}
 }
