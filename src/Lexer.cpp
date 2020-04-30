@@ -9,8 +9,10 @@
 namespace sam {
 	Token::Token(std::string word, TokenType type, std::size_t line) noexcept
 		: Word(std::move(word)), Type(type), Line(line) {}
+	Token::Token(std::string word, TokenData data, TokenType type, std::size_t line) noexcept
+		: Word(std::move(word)), Type(type), Data(std::move(data)), Line(line) {}
 	Token::Token(std::string word, std::string suffix, TokenData data, TokenType type, std::size_t line) noexcept
-		: Word(std::move(word)), Suffix(std::move(suffix)), Data(data), Type(type), Line(line) {}
+		: Word(std::move(word)), Suffix(std::move(suffix)), Data(std::move(data)), Type(type), Line(line) {}
 }
 
 namespace sam {
@@ -31,10 +33,12 @@ namespace sam {
 
 			for (m_Column = 0; m_Column < m_Line.size();) {
 				const char firstByte = m_Line[m_Column];
-				if (IsSpecial(firstByte)) {
-					LexSpecial();
-				} else if (std::isdigit(firstByte)) {
+				if (std::isdigit(firstByte)) {
 					LexNumber();
+				} else if (firstByte == '\'' || firstByte == '"') {
+					LexText(firstByte);
+				} else if (IsSpecial(firstByte)) {
+					LexSpecial();
 				} else {
 					m_Column += GetByteCount(firstByte);
 				}
@@ -188,8 +192,8 @@ namespace sam {
 			return;
 		}
 
-		std::size_t digitEnd = 0;
 		std::string digits;
+		std::size_t digitEnd = 0;
 		while (digitEnd < literal.size()) {
 			const char byte = literal[digitEnd++];
 			if (std::isdigit(byte)) {
@@ -214,5 +218,37 @@ namespace sam {
 		const double value = std::stod(digits);
 		const std::string_view suffix = literal.substr(digitEnd);
 		m_Result.emplace_back(std::string(literal), std::string(suffix), value, TokenType::Decimal, m_LineNum);
+	}
+
+	void Lexer::LexText(char firstByte) {
+		std::string text;
+		std::size_t textEnd = m_Column + 1;
+		while (true) {
+			const char byte = GetByte(textEnd++);
+			if (byte == 0) {
+				ERROR << "Unterminated text literal.\n";
+				m_Column = static_cast<std::size_t>(-1);
+				return;
+			} else if (byte == '\\') {
+				const char nextByte = GetByte(textEnd++);
+				if (nextByte == 0) {
+					ERROR << "Unterminated text literal.\n";
+					m_Column = static_cast<std::size_t>(-1);
+					return;
+				} else if (nextByte == firstByte) {
+					text.push_back(firstByte);
+				} else {
+					ERROR << "Invalid escape sequence '\\" << nextByte << "'.\n";
+					m_Column = static_cast<std::size_t>(-1);
+					return;
+				}
+			} else if (byte == firstByte) break;
+			else {
+				text.push_back(byte);
+			}
+		}
+
+		m_Result.emplace_back(m_Line.substr(m_Column, textEnd + 1), text, firstByte == '"' ? TokenType::String : TokenType::Character, m_LineNum);
+		m_Column = textEnd + 1;
 	}
 }

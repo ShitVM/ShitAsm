@@ -35,10 +35,8 @@ namespace sam {
 		RightParenthesis,		// )
 	};
 
-	using Char = std::variant<char, char16_t, char32_t>;
-	using String = std::variant<std::string, std::u16string, std::u32string>;
 	using Number = std::variant<std::uint64_t, double>;
-	using TokenData = std::variant<std::monostate, Char, String, Number>;
+	using TokenData = std::variant<std::monostate, Number, std::string>;
 
 	struct Token final {
 		std::string Word;
@@ -49,6 +47,7 @@ namespace sam {
 		std::string Suffix;
 
 		Token(std::string word, TokenType type, std::size_t line) noexcept;
+		Token(std::string word, TokenData data, TokenType type, std::size_t line) noexcept;
 		Token(std::string word, std::string suffix, TokenData data, TokenType type, std::size_t line) noexcept;
 	};
 }
@@ -99,5 +98,7 @@ namespace sam {
 		void LexDecInteger(std::string_view& literal);
 		void LexHexInteger(std::string_view& literal);
 		void LexDecimal(std::string_view& literal, std::size_t dot);
+
+		void LexText(char firstByte);
 	};
 }
