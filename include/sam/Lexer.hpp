@@ -4,6 +4,7 @@
 #include <istream>
 #include <sstream>
 #include <string>
+#include <string_view>
 #include <variant>
 #include <vector>
 
@@ -36,7 +37,7 @@ namespace sam {
 
 	using Char = std::variant<char, char16_t, char32_t>;
 	using String = std::variant<std::string, std::u16string, std::u32string>;
-	using Number = std::variant<std::uint32_t, std::uint64_t, double>;
+	using Number = std::variant<std::uint64_t, double>;
 	using TokenData = std::variant<std::monostate, Char, String, Number>;
 
 	struct Token final {
@@ -45,8 +46,10 @@ namespace sam {
 		TokenType Type = TokenType::None;
 		std::size_t Line = 0;
 
-		Token(TokenType type, std::size_t line) noexcept;
-		Token(std::string word, TokenData data, TokenType type, std::size_t line) noexcept;
+		std::string Suffix;
+
+		Token(std::string word, TokenType type, std::size_t line) noexcept;
+		Token(std::string word, std::string suffix, TokenData data, TokenType type, std::size_t line) noexcept;
 	};
 }
 
@@ -87,5 +90,14 @@ namespace sam {
 		char GetByte(std::size_t i) const noexcept;
 
 		void LexSpecial();
+
+		void LexNumber();
+		std::string_view ReadNumber();
+		void LexInteger(std::string_view& literal, std::size_t digitBegin, TokenType type, int base, bool(*isValidDigit)(char) noexcept);
+		void LexBinInteger(std::string_view& literal);
+		void LexOctInteger(std::string_view& literal);
+		void LexDecInteger(std::string_view& literal);
+		void LexHexInteger(std::string_view& literal);
+		void LexDecimal(std::string_view& literal);
 	};
 }
