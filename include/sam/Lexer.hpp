@@ -63,9 +63,11 @@ namespace sam {
 
 		std::vector<Token> m_Result;
 		bool m_HasError = false;
+		bool m_HasWarning = false;
+		bool m_HasInfo = false;
 
 	public:
-		Lexer(const std::string& path, std::istream& inputStream) noexcept;
+		Lexer(std::string path, std::istream& inputStream) noexcept;
 		Lexer(const Lexer&) = delete;
 		~Lexer() = default;
 
@@ -77,12 +79,13 @@ namespace sam {
 	public:
 		void Lex();
 		bool HasError() const noexcept;
+		bool HasMessage() const noexcept;
 		std::string GetMessages() const;
 
 	private:
 		bool IgnoreComment() noexcept;
-		char GetNextByte(std::size_t i) const noexcept;
+		char GetByte(std::size_t i) const noexcept;
 
-		void LexSpecial(char firstByte);
+		void LexSpecial();
 	};
 }
