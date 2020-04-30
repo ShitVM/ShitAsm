@@ -17,7 +17,7 @@ int main(int argc, char* argv[]) {
 	if (argc >= 3) {
 		output = argv[2];
 	} else {
-		output = svm::detail::fs::path(input).filename().string() + ".sbf";
+		output = svm::detail::fs::path(input).stem().string() + ".sbf";
 	}
 
 	sam::Assembly assembly;
