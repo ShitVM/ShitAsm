@@ -1,6 +1,14 @@
 #pragma once
 
 #include <sam/Assembly.hpp>
+#include <sam/Lexer.hpp>
+
+#include <sstream>
+#include <string>
+#include <vector>
+
+
+
 
 #include <cstddef>
 #include <cstdint>
@@ -11,6 +19,56 @@
 #include <variant>
 
 namespace sam {
+	class Parser final {
+	private:
+		std::string m_Path;
+		std::vector<Token> m_Tokens;
+		std::ostringstream m_ErrorStream;
+
+		std::size_t m_Token = 0;
+		Token m_EmptyToken;
+		const std::string* m_CurrentStructure = nullptr;
+		const std::string* m_CurrentFunction = nullptr;
+
+		Assembly m_Result;
+		bool m_HasError = false;
+		bool m_HasWarning = false;
+		bool m_HasInfo = false;
+
+	public:
+		Parser(std::string path, std::vector<Token> tokens) noexcept;
+		Parser(const Parser&) = delete;
+		~Parser() = default;
+
+	public:
+		Parser& operator=(const Parser&) = delete;
+
+	public:
+		void Parse();
+		Assembly GetAssembly() noexcept;
+
+		bool HasError() const noexcept;
+		bool HasMessage() const noexcept;
+		std::string GetMessages() const;
+
+	private:
+		void ResetState() noexcept;
+		const Token& GetToken(std::size_t i) const noexcept;
+		bool SkipOtherTokens(bool hasError);
+
+		bool FirstPass();
+		bool SecondPass();
+		bool ThirdPass();
+
+		void GenerateBuilders();
+
+		bool ParseStructure();
+		bool ParseFunction();
+		bool ParseLabel();
+	};
+}
+
+namespace sam {
 	struct Type final {
 		sgn::Type ElementType;
 		std::string ElementTypeName;
@@ -19,7 +77,7 @@ namespace sam {
 }
 
 namespace sam {
-	class Parser final {
+	class OldParser final {
 	private:
 		using Number = std::variant<bool, std::uint32_t, std::uint64_t, double>;
 
@@ -36,36 +94,29 @@ namespace sam {
 		std::size_t m_LineNum = 0;
 
 	public:
-		Parser(Assembly& assembly, std::ostream& errorStream) noexcept;
-		Parser(const Assembly&) = delete;
-		~Parser() = default;
+		OldParser(Assembly& assembly, std::ostream& errorStream) noexcept;
+		OldParser(const Assembly&) = delete;
+		~OldParser() = default;
 
 	public:
-		Parser& operator=(const Assembly&) = delete;
-		bool operator==(const Parser&) = delete;
-		bool operator!=(const Parser&) = delete;
+		OldParser& operator=(const Assembly&) = delete;
+		bool operator==(const OldParser&) = delete;
+		bool operator!=(const OldParser&) = delete;
 
 	public:
 		bool Parse(const std::string& path);
 		void Generate(const std::string& path);
 
 	private:
-		bool FirstPass();
 		bool SecondPass();
 		bool ThirdPass();
-		
-		void ResetState();
-		void GenerateBuilders();
 
-		bool IgnoreComment();
-		std::string ReadMnemonic();
 		bool IsValidIdentifier(const std::string& identifier);
 		sgn::Type GetType(const std::string& name);
 		template<typename F>
 		bool IsValidIntegerLiteral(const std::string& literal, std::string& literalMut, F&& function);
 		std::string ReadOperand();
 
-		bool ParseStructure();
 		bool ParseField(Structure* structure);
 		bool ParseFunction(bool isProcedure);
 		bool ParseLabel();

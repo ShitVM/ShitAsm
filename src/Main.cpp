@@ -1,5 +1,9 @@
 #include <sam/Lexer.hpp>
+#include <sam/Parser.hpp>
 #include <svm/detail/FileSystem.hpp>
+
+// Temp
+#include <sam/ExternModule.hpp>
 
 #include <cstdlib>
 #include <fstream>
@@ -26,9 +30,16 @@ int main(int argc, char* argv[]) {
 		if (lexer.HasError()) return EXIT_FAILURE;
 	}
 
-	const auto result = lexer.GetTokens();
-	for (const sam::Token& t : result) {
-		std::cout << t << '\n';
+	sam::Parser parser(input.string(), lexer.GetTokens());
+	parser.Parse();
+	if (parser.HasMessage()) {
+		std::cout << parser.GetMessages();
+		if (parser.HasError()) return EXIT_FAILURE;
+	}
+
+	const auto assembly = parser.GetAssembly();
+	for (const auto& s : assembly.Structures) {
+		std::cout << s.Name << '\n';
 	}
 
 	return EXIT_SUCCESS;

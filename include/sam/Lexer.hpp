@@ -47,6 +47,7 @@ namespace sam {
 
 		std::string Suffix;
 
+		Token() noexcept = default;
 		Token(std::string word, TokenType type, std::size_t line) noexcept;
 		Token(std::string word, TokenData data, TokenType type, std::size_t line) noexcept;
 		Token(std::string word, std::string suffix, TokenData data, TokenType type, std::size_t line) noexcept;

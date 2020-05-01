@@ -1,5 +1,12 @@
 #include <sam/Parser.hpp>
 
+#include <memory>
+#include <utility>
+
+
+
+#include <sam/ExternModule.hpp>
+
 #include <sam/Function.hpp>
 #include <sam/String.hpp>
 #include <sgn/ByteFile.hpp>
@@ -16,10 +23,144 @@
 #include <vector>
 
 namespace sam {
-	Parser::Parser(Assembly& assembly, std::ostream& errorStream) noexcept
+	Parser::Parser(std::string path, std::vector<Token> tokens) noexcept
+		: m_Path(std::move(path)), m_Tokens(std::move(tokens)) {}
+
+#define MESSAGEBASE m_ErrorStream << "In file '" << m_Path << "':\n    "
+#define INFO(token) (m_HasInfo = true, MESSAGEBASE) << "Info: Line " << token.Line << ", "
+#define WARNING(token) (m_HasWarning = true, MESSAGEBASE) << "Warning: Line " << token.Line << ", "
+#define ERROR(token) (m_HasError = true, MESSAGEBASE) << "Error: Line " << token.Line << ", "
+
+	void Parser::Parse() {
+		if (!FirstPass()) return;
+		ResetState();
+
+		// TODO
+	}
+	Assembly Parser::GetAssembly() noexcept {
+		return std::move(m_Result);
+	}
+
+	bool Parser::HasError() const noexcept {
+		return m_HasError;
+	}
+	bool Parser::HasMessage() const noexcept {
+		return m_HasError || m_HasWarning || m_HasInfo;
+	}
+	std::string Parser::GetMessages() const {
+		return m_ErrorStream.str();
+	}
+
+	void Parser::ResetState() noexcept {
+		m_Token = 0;
+		m_CurrentStructure = m_CurrentFunction = nullptr;
+	}
+	const Token& Parser::GetToken(std::size_t i) const noexcept {
+		if (i >= m_Tokens.size()) return m_EmptyToken;
+		else return m_Tokens[i];
+	}
+	bool Parser::SkipOtherTokens(bool hasError) {
+		const Token& newLineToken = GetToken(++m_Token);
+		if (newLineToken.Type != TokenType::None && newLineToken.Type != TokenType::NewLine) {
+			ERROR(newLineToken) << "Unexcepted tokens before end-of-line.\n";
+			return false;
+		}
+
+		const Token* token = &GetToken(m_Token);
+		while (token->Type != TokenType::None && token->Type != TokenType::NewLine) {
+			++m_Token;
+		}
+
+		return !hasError;
+	}
+
+	bool Parser::FirstPass() {
+		bool hasError = false;
+
+		for (m_Token = 0; m_Token < m_Tokens.size(); ++m_Token) {
+			const Token& token = m_Tokens[m_Token];
+			if (token.Type == TokenType::Identifier) {
+				if (token.Word == "struct") {
+					hasError |= !ParseStructure();
+				} else if (token.Word == "proc" || token.Word == "func") {
+					hasError |= !ParseFunction();
+				} else {
+					hasError |= !ParseLabel();
+				}
+			}
+		}
+
+		if (!m_Result.HasFunction("entrypoint")) {
+			MESSAGEBASE << "Error: There is no 'entrypoint' procedure.\n";
+			hasError = true;
+		}
+
+		GenerateBuilders();
+		return !hasError;
+	}
+	bool Parser::SecondPass() {
+		return true; // TODO
+	}
+	bool Parser::ThirdPass() {
+		return true; // TODO
+	}
+
+	void Parser::GenerateBuilders() {
+		for (auto& func : m_Result.Functions) {
+			if (func.Name == "entrypoint") {
+				func.Builder = std::make_unique<sgn::Builder>(m_Result.ByteFile, m_Result.ByteFile.GetEntrypoint());
+			} else {
+				func.Builder = std::make_unique<sgn::Builder>(m_Result.ByteFile, func.Index);
+			}
+
+			for (auto& label : func.Labels) {
+				label.Index = func.Builder->ReserveLabel(label.Name);
+			}
+
+			std::uint32_t i = 0;
+			for (auto& param : func.LocalVariables) {
+				param.Index = func.Builder->GetArgument(i++);
+			}
+		}
+	}
+
+	bool Parser::ParseStructure() {
+		bool hasError = false;
+
+		const Token& nameToken = GetToken(m_Token + 1);
+		const Token& colonToken = GetToken(m_Token + 2);
+		if (colonToken.Type != TokenType::Colon) return true;
+		else if (nameToken.Type != TokenType::Identifier) {
+			ERROR(nameToken) << "Required structure name.\n";
+			return false;
+		}
+
+		m_CurrentStructure = &nameToken.Word;
+		m_CurrentFunction = nullptr;
+		if (m_Result.HasStructure(*m_CurrentStructure)) {
+			ERROR(nameToken) << "Duplicated structure name '" << *m_CurrentStructure << "'.\n";
+			hasError = true;
+		}
+
+		const sgn::StructureIndex index = m_Result.ByteFile.AddStructure();
+		m_Result.Structures.push_back(Structure{ *m_CurrentStructure, index });
+
+		m_Token += 2;
+		return SkipOtherTokens(hasError);
+	}
+	bool Parser::ParseFunction() {
+		return true; // TODO
+	}
+	bool Parser::ParseLabel() {
+		return true; // TODO
+	}
+}
+
+namespace sam {
+	OldParser::OldParser(Assembly& assembly, std::ostream& errorStream) noexcept
 		: m_Assembly(assembly), m_ErrorStream(errorStream) {}
 
-	bool Parser::Parse(const std::string& path) {
+	bool OldParser::Parse(const std::string& path) {
 		m_ReadPath = svm::detail::fs::absolute(path).string();
 
 		m_ReadStream.open(m_ReadPath);
@@ -28,17 +169,13 @@ namespace sam {
 			return false;
 		}
 
-		if (!FirstPass()) return false;
-		ResetState();
-
 		if (!SecondPass()) return false;
-		ResetState();
 
 		if (!ThirdPass()) return false;
 
 		return true;
 	}
-	void Parser::Generate(const std::string& path) {
+	void OldParser::Generate(const std::string& path) {
 		sgn::Generator gen(m_Assembly.ByteFile);
 		gen.Generate(path);
 	}
@@ -48,37 +185,10 @@ namespace sam {
 #define WARNING MESSAGEBASE << "Warning: Line " << m_LineNum << ", "
 #define ERROR MESSAGEBASE << "Error: Line " << m_LineNum << ", "
 
-	bool Parser::FirstPass() {
-		bool hasError = false;
+	bool OldParser::SecondPass() {
+		return true;
 
-		while (std::getline(m_ReadStream, m_Line) && ++m_LineNum) {
-			if (IgnoreComment()) continue;
-
-			if (m_Line.find(':') != std::string::npos) {
-				const std::string lineBackup = m_Line;
-				const std::string mnemonic = ReadMnemonic();
-				if (mnemonic == "struct") {
-					hasError |= !ParseStructure();
-				} else if (mnemonic == "proc" || mnemonic == "func") {
-					hasError |= !ParseFunction(mnemonic == "proc");
-				} else {
-					m_Line = lineBackup;
-					hasError |= !ParseLabel();
-				}
-			}
-		}
-
-		if (!m_Assembly.HasFunction("entrypoint")) {
-			MESSAGEBASE << "Error: There is no 'entrypoint' procedure.\n";
-			hasError = true;
-		}
-
-		GenerateBuilders();
-
-		return !hasError;
-	}
-	bool Parser::SecondPass() {
-		std::size_t structInx = 0, fieldInx = 0;
+		/*std::size_t structInx = 0, fieldInx = 0;
 
 		Structure* currentStructure = nullptr;
 
@@ -103,10 +213,12 @@ namespace sam {
 			hasError |= !ParseField(currentStructure);
 		}
 
-		return !hasError;
+		return !hasError;*/
 	}
-	bool Parser::ThirdPass() {
-		std::size_t structInx = 0, fieldInx = 0;
+	bool OldParser::ThirdPass() {
+		return true;
+
+		/*std::size_t structInx = 0, fieldInx = 0;
 		std::size_t funcInx = 0, labelInx = 0;
 
 		Function* currentFunction = nullptr;
@@ -140,51 +252,10 @@ namespace sam {
 			hasError |= !ParseInstruction(currentFunction);
 		}
 
-		return !hasError;
+		return !hasError;*/
 	}
 
-	void Parser::ResetState() {
-		m_ReadStream.clear();
-		m_ReadStream.seekg(0, std::ifstream::beg);
-
-		m_CurrentStructure.clear();
-		m_CurrentFunction.clear();
-
-		m_LineNum = 0;
-	}
-	void Parser::GenerateBuilders() {
-		for (auto& func : m_Assembly.Functions) {
-			if (func.Name == "entrypoint") {
-				func.Builder = std::make_unique<sgn::Builder>(m_Assembly.ByteFile, m_Assembly.ByteFile.GetEntrypoint());
-			} else {
-				func.Builder = std::make_unique<sgn::Builder>(m_Assembly.ByteFile, func.Index);
-			}
-
-			for (auto& label : func.Labels) {
-				label.Index = func.Builder->ReserveLabel(label.Name);
-			}
-
-			std::uint32_t i = 0;
-			for (auto& param : func.LocalVariables) {
-				param.Index = func.Builder->GetArgument(i++);
-			}
-		}
-	}
-
-	bool Parser::IgnoreComment() {
-		if (const auto commentBegin = m_Line.find(';'); commentBegin != std::string::npos) {
-			m_Line.erase(m_Line.begin() + commentBegin, m_Line.end());
-		}
-
-		Trim(m_Line);
-		return m_Line.empty();
-	}
-	std::string Parser::ReadMnemonic() {
-		std::string mnemonic = ReadBeforeSpace(m_Line);
-		std::transform(mnemonic.begin(), mnemonic.end(), mnemonic.begin(), [](char c) { return static_cast<char>(std::tolower(c)); });
-		return mnemonic;
-	}
-	bool Parser::IsValidIdentifier(const std::string& identifier) {
+	bool OldParser::IsValidIdentifier(const std::string& identifier) {
 		if (std::isdigit(identifier.front())) return false;
 
 		for (const char c : identifier) {
@@ -193,7 +264,7 @@ namespace sam {
 
 		return true;
 	}
-	sgn::Type Parser::GetType(const std::string& name) {
+	sgn::Type OldParser::GetType(const std::string& name) {
 		static const std::unordered_map<std::string, sgn::Type> fundamental = {
 			{ "int", sgn::IntType },
 			{ "long", sgn::LongType },
@@ -210,7 +281,7 @@ namespace sam {
 		else return nullptr;
 	}
 	template<typename F>
-	bool Parser::IsValidIntegerLiteral(const std::string& literal, std::string& literalMut, F&& function) {
+	bool OldParser::IsValidIntegerLiteral(const std::string& literal, std::string& literalMut, F&& function) {
 		for (std::size_t i = 0; i < literalMut.size(); ++i) {
 			if (i != 0 && i != literalMut.size() - 1 && literalMut[i] == ',') {
 				literalMut.erase(literalMut.begin() + i);
@@ -223,7 +294,7 @@ namespace sam {
 		}
 		return true;
 	}
-	std::string Parser::ReadOperand() {
+	std::string OldParser::ReadOperand() {
 		std::string result = ReadBeforeSpace(m_Line); Trim(result);
 		if (!m_Line.empty()) {
 			ERROR << "Unexcepted characters after operand.\n";
@@ -234,41 +305,7 @@ namespace sam {
 		} else return result;
 	}
 
-	bool Parser::ParseStructure() {
-		bool hasError = false;
-
-		std::string name = ReadBeforeSpecialChar(m_Line); Trim(name);
-		m_CurrentStructure = name;
-		m_CurrentFunction.clear();
-
-		if (name.empty()) {
-			ERROR << "Required structure name.\n";
-			return false;
-		} else if (!IsValidIdentifier(name)) {
-			ERROR << "Invalid structure name '" << name << "'.\n";
-			hasError = true;
-		} else if (m_Assembly.HasStructure(name)) {
-			ERROR << "Duplicated structure name '" << name << "'.\n";
-			hasError = true;
-		}
-
-		if (m_Line.size() == 0) {
-			ERROR << "Unexcepted end-of-file after structure name.\n";
-			hasError = true;
-		} else if (m_Line.front() != ':') {
-			ERROR << "Excepted ':' after structure name.\n";
-			hasError = true;
-		} else if (m_Line.size() > 1) {
-			ERROR << "Unexcepted characters after ':'.\n";
-			hasError = true;
-		}
-
-		const sgn::StructureIndex index = m_Assembly.ByteFile.AddStructure();
-		m_Assembly.Structures.push_back(Structure{ std::move(name), index });
-
-		return !hasError;
-	}
-	bool Parser::ParseField(Structure* structure) {
+	bool OldParser::ParseField(Structure* structure) {
 		bool hasError = false;
 
 		const auto type = ParseType(m_Line);
@@ -297,7 +334,7 @@ namespace sam {
 
 		return !hasError;
 	}
-	bool Parser::ParseFunction(bool isProcedure) {
+	bool OldParser::ParseFunction(bool isProcedure) {
 		bool hasError = false;
 
 		std::string name = ReadBeforeSpecialChar(m_Line); Trim(name);
@@ -368,7 +405,7 @@ namespace sam {
 
 		return !hasError;
 	}
-	bool Parser::ParseLabel() {
+	bool OldParser::ParseLabel() {
 		if (m_CurrentFunction.empty()) {
 			ERROR << "Not belonged label.\n";
 			return false;
@@ -393,8 +430,8 @@ namespace sam {
 
 		return !hasError;
 	}
-	bool Parser::ParseInstruction(Function* function) {
-		const std::string mnemonic = ReadMnemonic();
+	bool OldParser::ParseInstruction(Function* function) {
+		const std::string mnemonic;// = ReadMnemonic();
 		switch (CRC32(mnemonic)) {
 		case "nop"_h: function->Builder->Nop(); break;
 
@@ -696,7 +733,7 @@ namespace sam {
 		return true;
 	}
 
-	std::optional<Type> Parser::ParseType(std::string& line) {
+	std::optional<Type> OldParser::ParseType(std::string& line) {
 		bool hasError = false;
 
 		std::string typeName;
@@ -728,7 +765,7 @@ namespace sam {
 		} else {
 			std::visit([&count](auto v) mutable {
 				count = static_cast<std::uint64_t>(v);
-			}, countVar);
+				}, countVar);
 			if (count == 0) {
 				ERROR << "Array's length cannot be zero.\n";
 				hasError = true;
@@ -757,7 +794,7 @@ namespace sam {
 		if (hasError) return std::nullopt;
 		else return Type{ type, std::move(typeName), count };
 	}
-	Parser::Number Parser::ParseNumber(std::string& line) {
+	OldParser::Number OldParser::ParseNumber(std::string& line) {
 		std::string literal = ReadBeforeSpace(line); Trim(literal);
 		if (literal.empty()) return false;
 
@@ -793,7 +830,7 @@ namespace sam {
 		} else return ParseDecInteger(literal, literalMut, isNegative);
 	}
 	template<typename F>
-	Parser::Number Parser::ParseInteger(const std::string& literal, std::string& literalMut, bool isNegative, int base, F&& function) {
+	OldParser::Number OldParser::ParseInteger(const std::string& literal, std::string& literalMut, bool isNegative, int base, F&& function) {
 		if (literalMut.find('.') != std::string::npos) {
 			ERROR << "Invalid integer literal '" << literal << "'.\n";
 			return false;
@@ -825,31 +862,31 @@ namespace sam {
 			}
 		}
 	}
-	Parser::Number Parser::ParseBinInteger(const std::string& literal, std::string& literalMut, bool isNegative) {
+	OldParser::Number OldParser::ParseBinInteger(const std::string& literal, std::string& literalMut, bool isNegative) {
 		return ParseInteger(literal, literalMut, isNegative, 2, [](char c) {
 			return !(c == '0' || c == '1');
-		});
+			});
 	}
-	Parser::Number Parser::ParseOctInteger(const std::string& literal, std::string& literalMut, bool isNegative) {
+	OldParser::Number OldParser::ParseOctInteger(const std::string& literal, std::string& literalMut, bool isNegative) {
 		if (literalMut.find('.') != std::string::npos) return ParseDecimal(literal, literalMut, isNegative);
 		else return ParseInteger(literal, literalMut, isNegative, 8, [](char c) {
 			return !(c <= '0' && c <= '7');
-		});
+			});
 	}
-	Parser::Number Parser::ParseDecInteger(const std::string& literal, std::string& literalMut, bool isNegative) {
+	OldParser::Number OldParser::ParseDecInteger(const std::string& literal, std::string& literalMut, bool isNegative) {
 		if (literalMut.find('.') != std::string::npos) return ParseDecimal(literal, literalMut, isNegative);
 		else return ParseInteger(literal, literalMut, isNegative, 10, [](char c) {
 			return !(std::isdigit(c));
-		});
+			});
 	}
-	Parser::Number Parser::ParseHexInteger(const std::string& literal, std::string& literalMut, bool isNegative) {
+	OldParser::Number OldParser::ParseHexInteger(const std::string& literal, std::string& literalMut, bool isNegative) {
 		return ParseInteger(literal, literalMut, isNegative, 16, [](char c) {
 			return !(std::isdigit(c) ||
-					 'a' <= c && c <= 'f' ||
-					 'A' <= c && c <= 'F');
-		});
+				'a' <= c && c <= 'f' ||
+				'A' <= c && c <= 'F');
+			});
 	}
-	Parser::Number Parser::ParseDecimal(const std::string& literal, std::string& literalMut, bool isNegative) {
+	OldParser::Number OldParser::ParseDecimal(const std::string& literal, std::string& literalMut, bool isNegative) {
 		const std::size_t dot = literalMut.find('.');
 		if (literalMut.find('.', dot + 1) != std::string::npos) {
 			ERROR << "Invalid decimal literal '" << literal << "'.\n";
@@ -861,7 +898,7 @@ namespace sam {
 		else return abs;
 	}
 
-	std::optional<sgn::FieldIndex> Parser::GetField(const std::string& name) {
+	std::optional<sgn::FieldIndex> OldParser::GetField(const std::string& name) {
 		const std::size_t dot = name.find('.');
 		if (dot == std::string::npos || name.find('.', dot + 1) != std::string::npos) {
 			ERROR << "Invalid field name '" << name << "'.\n";
@@ -885,7 +922,7 @@ namespace sam {
 
 		return fieldIter->Index;
 	}
-	std::optional<sgn::FunctionIndex> Parser::GetFunction(const std::string& name) {
+	std::optional<sgn::FunctionIndex> OldParser::GetFunction(const std::string& name) {
 		const auto iter = m_Assembly.FindFunction(name);
 		if (iter == m_Assembly.Functions.end()) {
 			ERROR << "Nonexistent function or procedure name '" << name << "'.\n";
@@ -895,14 +932,14 @@ namespace sam {
 			return std::nullopt;
 		} else return iter->Index;
 	}
-	std::optional<sgn::LabelIndex> Parser::GetLabel(Function* function, const std::string& name) {
+	std::optional<sgn::LabelIndex> OldParser::GetLabel(Function* function, const std::string& name) {
 		const auto iter = function->FindLabel(name);
 		if (iter == function->Labels.end()) {
 			ERROR << "Nonexistent label name '" << name << "'.\n";
 			return std::nullopt;
 		} else return iter->Index;
 	}
-	std::optional<sgn::LocalVariableIndex> Parser::GetLocalVariable(Function* function, const std::string& name) {
+	std::optional<sgn::LocalVariableIndex> OldParser::GetLocalVariable(Function* function, const std::string& name) {
 		const auto iter = function->FindLocalVariable(name);
 		if (iter == function->LocalVariables.end()) return std::nullopt;
 		else return iter->Index;
