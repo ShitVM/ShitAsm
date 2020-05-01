@@ -4,6 +4,7 @@
 #include <sam/String.hpp>
 
 #include <cctype>
+#include <unordered_map>
 #include <utility>
 
 namespace sam {
@@ -17,7 +18,8 @@ namespace sam {
 	std::ostream& operator<<(std::ostream& stream, const Token& token) {
 		static constexpr std::string_view tokenTypes[] = {
 			"None", "NewLine",
-			"Identifier",
+			"Identifier", "StructKeyword", "FuncKeyword", "ProcKeyword",
+			"IntKeyword", "LongKeyword", "DoubleKeyword", "PointerKeyword", "GCPointerKeyword",
 			"BinInteger", "OctInteger", "DecInteger", "HexInteger", "Decimal",
 			"Plus", "Minus",
 			"Character", "String",
@@ -299,5 +301,20 @@ namespace sam {
 		const std::string identifier = m_Line.substr(m_Column, end - m_Column);
 		m_Result.emplace_back(identifier, identifier, TokenType::Identifier, m_LineNum);
 		m_Column += identifier.size();
+
+		static const std::unordered_map<std::string, TokenType> keywords = {
+			{ "struct", TokenType::StructKeyword },
+			{ "func", TokenType::FuncKeyword },
+			{ "proc", TokenType::ProcKeyword },
+
+			{ "int", TokenType::IntKeyword },
+			{ "long", TokenType::LongKeyword },
+			{ "double", TokenType::DoubleKeyword },
+			{ "pointer", TokenType::PointerKeyword },
+			{ "gcpointer", TokenType::GCPointerKeyword },
+		};
+		if (const auto keyword = keywords.find(identifier); keyword != keywords.end()) {
+			m_Result.back().Type = keyword->second;
+		}
 	}
 }

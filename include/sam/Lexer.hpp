@@ -15,6 +15,15 @@ namespace sam {
 		NewLine,
 
 		Identifier,
+		StructKeyword,
+		FuncKeyword,
+		ProcKeyword,
+
+		IntKeyword,
+		LongKeyword,
+		DoubleKeyword,
+		PointerKeyword,
+		GCPointerKeyword,
 
 		BinInteger,
 		OctInteger,
@@ -36,6 +45,8 @@ namespace sam {
 		LeftParenthesis,		// (
 		RightParenthesis,		// )
 	};
+
+	constexpr bool IsKeyword(TokenType type) noexcept;
 
 	using TokenData = std::variant<std::monostate, std::uint64_t, double, std::string>;
 
@@ -110,3 +121,5 @@ namespace sam {
 		void LexIdentifier();
 	};
 }
+
+#include "detail/impl/Lexer.hpp"
