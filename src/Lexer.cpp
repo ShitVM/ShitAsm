@@ -13,6 +13,37 @@ namespace sam {
 		: Word(std::move(word)), Type(type), Data(std::move(data)), Line(line) {}
 	Token::Token(std::string word, std::string suffix, TokenData data, TokenType type, std::size_t line) noexcept
 		: Word(std::move(word)), Suffix(std::move(suffix)), Data(std::move(data)), Type(type), Line(line) {}
+
+	std::ostream& operator<<(std::ostream& stream, const Token& token) {
+		static constexpr std::string_view tokenTypes[] = {
+			"None", "NewLine",
+			"Identifier",
+			"BinInteger", "OctInteger", "DecInteger", "HexInteger", "Decimal",
+			"Plus", "Minus",
+			"Character", "String",
+			"Colon", "Dot", "Comma", "LeftBracket", "RightBracket", "LeftParenthesis", "RightParenthesis",
+		};
+
+		stream << "Line " << token.Line << ": " << tokenTypes[static_cast<int>(token.Type)];
+		if (token.Type != TokenType::NewLine) {
+			stream << "\n\tWord: \"" << token.Word << '"';
+		}
+		if (!std::holds_alternative<std::monostate>(token.Data)) {
+			stream << "\n\tData: ";
+			if (std::holds_alternative<std::uint64_t>(token.Data)) {
+				stream << std::get<std::uint64_t>(token.Data);
+			} else if (std::holds_alternative<double>(token.Data)) {
+				stream << std::get<double>(token.Data);
+			} else if (std::holds_alternative<std::string>(token.Data)) {
+				stream << '"' << std::get<std::string>(token.Data) << '"';
+			}
+		}
+		if (!token.Suffix.empty()) {
+			stream << "\n\tSuffix: \"" << token.Suffix << '"';
+		}
+
+		return stream;
+	}
 }
 
 namespace sam {
@@ -45,6 +76,10 @@ namespace sam {
 			}
 		}
 	}
+	std::vector<Token> Lexer::GetTokens() noexcept {
+		return std::move(m_Result);
+	}
+
 	bool Lexer::HasError() const noexcept {
 		return m_HasError;
 	}
@@ -70,17 +105,19 @@ namespace sam {
 
 	void Lexer::LexSpecial() {
 		const char firstByte = GetByte(m_Column++);
-#define CASE(e, c) case c: m_Result.emplace_back(std::string(1, c), TokenType:: e, m_LineNum); break
 		switch (firstByte) {
+#define CASE(e, c) case c: m_Result.emplace_back(std::string(1, c), TokenType:: e, m_LineNum); break
 		CASE(Plus, '+');
 		CASE(Minus, '-');
 
 		CASE(Colon, ':');
 		CASE(Dot, '.');
+		CASE(Comma, ',');
 		CASE(LeftBracket, '[');
 		CASE(RightBracket, ']');
 		CASE(LeftParenthesis, '(');
 		CASE(RightParenthesis, ')');
+#undef CASE
 
 		default:
 			if (!std::isspace(firstByte)) {
@@ -88,7 +125,6 @@ namespace sam {
 			}
 			break;
 		}
-#undef CASE
 	}
 
 	void Lexer::LexNumber() {

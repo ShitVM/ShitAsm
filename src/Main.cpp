@@ -26,5 +26,10 @@ int main(int argc, char* argv[]) {
 		if (lexer.HasError()) return EXIT_FAILURE;
 	}
 
+	const auto result = lexer.GetTokens();
+	for (const sam::Token& t : result) {
+		std::cout << t << '\n';
+	}
+
 	return EXIT_SUCCESS;
 }

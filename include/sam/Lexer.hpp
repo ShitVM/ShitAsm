@@ -2,6 +2,7 @@
 
 #include <cstddef>
 #include <istream>
+#include <ostream>
 #include <sstream>
 #include <string>
 #include <string_view>
@@ -29,14 +30,14 @@ namespace sam {
 
 		Colon,					// :
 		Dot,					// .
+		Comma,					// ,
 		LeftBracket,			// [
 		RightBracket,			// ]
 		LeftParenthesis,		// (
 		RightParenthesis,		// )
 	};
 
-	using Number = std::variant<std::uint64_t, double>;
-	using TokenData = std::variant<std::monostate, Number, std::string>;
+	using TokenData = std::variant<std::monostate, std::uint64_t, double, std::string>;
 
 	struct Token final {
 		std::string Word;
@@ -50,6 +51,8 @@ namespace sam {
 		Token(std::string word, TokenData data, TokenType type, std::size_t line) noexcept;
 		Token(std::string word, std::string suffix, TokenData data, TokenType type, std::size_t line) noexcept;
 	};
+
+	std::ostream& operator<<(std::ostream& stream, const Token& token);
 }
 
 namespace sam {
@@ -80,6 +83,8 @@ namespace sam {
 
 	public:
 		void Lex();
+		std::vector<Token> GetTokens() noexcept;
+
 		bool HasError() const noexcept;
 		bool HasMessage() const noexcept;
 		std::string GetMessages() const;
