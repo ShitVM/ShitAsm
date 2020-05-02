@@ -27,9 +27,9 @@ namespace sam {
 		: m_Path(std::move(path)), m_Tokens(std::move(tokens)) {}
 
 #define MESSAGEBASE m_ErrorStream << "In file '" << m_Path << "':\n    "
-#define INFO(token) (m_HasInfo = true, MESSAGEBASE) << "Info: Line " << token.Line << ", "
-#define WARNING(token) (m_HasWarning = true, MESSAGEBASE) << "Warning: Line " << token.Line << ", "
-#define ERROR(token) (m_HasError = true, MESSAGEBASE) << "Error: Line " << token.Line << ", "
+#define INFO (m_HasInfo = true, MESSAGEBASE) << "Info: Line " << m_Tokens[m_Token].Line << ", "
+#define WARNING (m_HasWarning = true, MESSAGEBASE) << "Warning: Line " << m_Tokens[m_Token].Line << ", "
+#define ERROR (m_HasError = true, MESSAGEBASE) << "Error: Line " << m_Tokens[m_Token].Line << ", "
 
 	void Parser::Parse() {
 		if (!FirstPass()) return;
@@ -62,7 +62,7 @@ namespace sam {
 	bool Parser::SkipOtherTokens(bool hasError) {
 		const Token& newLineToken = GetToken(++m_Token);
 		if (newLineToken.Type != TokenType::None && newLineToken.Type != TokenType::NewLine) {
-			ERROR(newLineToken) << "Unexcepted tokens before end-of-line.\n";
+			ERROR << "Unexcepted tokens before end-of-line.\n";
 			return false;
 		}
 
@@ -79,12 +79,13 @@ namespace sam {
 
 		for (m_Token = 0; m_Token < m_Tokens.size(); ++m_Token) {
 			const Token& token = m_Tokens[m_Token];
-			if (token.Type == TokenType::Identifier) {
-				if (token.Word == "struct") {
-					hasError |= !ParseStructure();
-				} else if (token.Word == "proc" || token.Word == "func") {
-					hasError |= !ParseFunction();
-				} else {
+			if (token.Type == TokenType::StructKeyword) {
+				hasError |= !ParseStructure();
+			} else if (token.Type == TokenType::FuncKeyword || token.Type == TokenType::ProcKeyword) {
+				hasError |= !ParseFunction();
+			} else {
+				const Token& nextToken = GetToken(m_Token + 1);
+				if (token.Type == TokenType::Identifier && nextToken.Type == TokenType::Colon) {
 					hasError |= !ParseLabel();
 				}
 			}
@@ -126,26 +127,36 @@ namespace sam {
 
 	bool Parser::ParseStructure() {
 		bool hasError = false;
+		std::size_t validTokens = 2;
 
 		const Token& nameToken = GetToken(m_Token + 1);
 		const Token& colonToken = GetToken(m_Token + 2);
-		if (colonToken.Type != TokenType::Colon) return true;
-		else if (nameToken.Type != TokenType::Identifier) {
-			ERROR(nameToken) << "Required structure name.\n";
-			return false;
-		}
-
-		m_CurrentStructure = &nameToken.Word;
-		m_CurrentFunction = nullptr;
-		if (m_Result.HasStructure(*m_CurrentStructure)) {
-			ERROR(nameToken) << "Duplicated structure name '" << *m_CurrentStructure << "'.\n";
+		if (nameToken.Type != TokenType::Identifier) {
+			ERROR << "Required structure name.\n";
+			if (IsKeyword(nameToken.Type)) {
+				INFO << "Keywords cannot be used as an identifier.\n";
+			}
 			hasError = true;
+			--validTokens;
+		} else if (colonToken.Type != TokenType::Colon) {
+			ERROR << "Excepted ':' after structure name.\n";
+			hasError = true;
+			--validTokens;
 		}
 
-		const sgn::StructureIndex index = m_Result.ByteFile.AddStructure();
-		m_Result.Structures.push_back(Structure{ *m_CurrentStructure, index });
+		if (nameToken.Type == TokenType::Identifier) {
+			m_CurrentStructure = &nameToken.Word;
+			m_CurrentFunction = nullptr;
+			if (m_Result.HasStructure(*m_CurrentStructure)) {
+				ERROR << "Duplicated structure name '" << *m_CurrentStructure << "'.\n";
+				hasError = true;
+			}
 
-		m_Token += 2;
+			const sgn::StructureIndex index = m_Result.ByteFile.AddStructure();
+			m_Result.Structures.push_back(Structure{ *m_CurrentStructure, index });
+		}
+
+		m_Token += validTokens;
 		return SkipOtherTokens(hasError);
 	}
 	bool Parser::ParseFunction() {
