@@ -40,8 +40,8 @@ int main(int argc, char* argv[]) {
 	const auto assembly = parser.GetAssembly();
 	for (const auto& f : assembly.Functions) {
 		std::cout << f.Name << '\n';
-		for (const auto& p : f.LocalVariables) {
-			std::cout << '\t' << p.Name << '\n';
+		for (const auto& l : f.Labels) {
+			std::cout << '\t' << l.Name << '\n';
 		}
 	}
 

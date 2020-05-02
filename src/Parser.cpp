@@ -264,7 +264,24 @@ namespace sam {
 		return SkipOtherTokens(hasError);
 	}
 	bool Parser::ParseLabel() {
-		return true; // TODO
+		if (m_CurrentFunction == nullptr) {
+			ERROR << "Not belonged label.\n";
+			return false;
+		}
+
+		bool hasError = false;
+		Function& currentFunction = m_Result.GetFunction(*m_CurrentFunction);
+
+		const Token& nameToken = GetToken(m_Token);
+		if (currentFunction.HasLabel(nameToken.Word)) {
+			ERROR << "Duplicated label name '" << nameToken.Word << "'.\n";
+			hasError = true;
+		}
+
+		currentFunction.Labels.push_back(Label{ nameToken.Word });
+
+		m_Token += 1;
+		return SkipOtherTokens(hasError);
 	}
 }
 
