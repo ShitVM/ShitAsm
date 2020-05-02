@@ -63,7 +63,7 @@ namespace sam {
 		void GenerateBuilders();
 
 		bool ParseStructure();
-		bool ParseFunction();
+		bool ParseFunction(bool hasResult);
 		bool ParseLabel();
 	};
 }

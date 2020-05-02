@@ -1,5 +1,7 @@
 #include <sam/Parser.hpp>
 
+#include <algorithm>
+#include <iterator>
 #include <memory>
 #include <utility>
 
@@ -82,7 +84,7 @@ namespace sam {
 			if (token.Type == TokenType::StructKeyword) {
 				hasError |= !ParseStructure();
 			} else if (token.Type == TokenType::FuncKeyword || token.Type == TokenType::ProcKeyword) {
-				hasError |= !ParseFunction();
+				hasError |= !ParseFunction(token.Type == TokenType::FuncKeyword);
 			} else {
 				const Token& nextToken = GetToken(m_Token + 1);
 				if (token.Type == TokenType::Identifier && nextToken.Type == TokenType::Colon) {
@@ -159,8 +161,107 @@ namespace sam {
 		m_Token += validTokens;
 		return SkipOtherTokens(hasError);
 	}
-	bool Parser::ParseFunction() {
-		return true; // TODO
+	bool Parser::ParseFunction(bool hasResult) {
+		bool hasError = false;
+		std::size_t validTokens = 2;
+
+		const Token& nameToken = GetToken(m_Token + 1);
+		const Token& colonOrParamBeginToken = GetToken(m_Token + 2);
+		if (nameToken.Type != TokenType::Identifier) {
+			ERROR << "Required function or procedure name.\n";
+			if (IsKeyword(nameToken.Type)) {
+				INFO << "Keywords cannot be used as an identifier.\n";
+			}
+			hasError = true;
+			--validTokens;
+		} else if (colonOrParamBeginToken.Type != TokenType::Colon && colonOrParamBeginToken.Type != TokenType::LeftParenthesis) {
+			ERROR << "Excepted ':' after function or procedure name.\n";
+			hasError = true;
+			--validTokens;
+		}
+
+		std::vector<LocalVariable> params;
+		if (colonOrParamBeginToken.Type == TokenType::LeftParenthesis) {
+			std::size_t rightParenthesisTokenIndex = m_Token + 3;
+			bool isClosed = true;
+			while (GetToken(rightParenthesisTokenIndex).Type != TokenType::RightParenthesis) {
+				const Token& token = GetToken(rightParenthesisTokenIndex);
+				if (token.Type == TokenType::None || token.Type == TokenType::NewLine) {
+					ERROR << "Unexcepted end-of-line after '" << GetToken(rightParenthesisTokenIndex - 1).Word << "'.\n";
+					isClosed = false;
+					hasError = true;
+					break;
+				} else if (token.Type == TokenType::Colon) {
+					ERROR << "Excepted ')' before ':'.\n";
+					isClosed = false;
+					hasError = true;
+					break;
+				}
+
+				++rightParenthesisTokenIndex;
+			}
+
+			std::vector<std::string> strParams;
+			const Token* before = &colonOrParamBeginToken;
+			for (std::size_t i = m_Token + 3; i < rightParenthesisTokenIndex; ++i) {
+				const Token& token = GetToken(i);
+				if (token.Type == TokenType::Identifier) {
+					if (before->Type == TokenType::Identifier) {
+						ERROR << "Excepted ',' after '" << before->Word << "'.\n";
+						hasError = true;
+					} else {
+						strParams.push_back(token.Word);
+					}
+				} else if (token.Type == TokenType::Comma) {
+					if (before->Type == TokenType::Comma) {
+						ERROR << "Excepted identifier after ','.\n";
+						hasError = true;
+					}
+				} else {
+					ERROR << "Unexcepted token after '" << before->Word << "'.\n";
+					hasError = true;
+				}
+
+				before = &token;
+			}
+
+			std::vector<std::string> sortedStrParams = strParams;
+			std::sort(sortedStrParams.begin(), sortedStrParams.end());
+			if (const auto duplicated = std::unique(sortedStrParams.begin(), sortedStrParams.end()); duplicated != sortedStrParams.end()) {
+				ERROR << "Duplicated parameter name '" << *duplicated << "'.\n";
+				hasError = true;
+			}
+			std::transform(sortedStrParams.begin(), sortedStrParams.end(), std::back_inserter(params), [](auto& name) {
+				return LocalVariable{ std::move(name) };
+			});
+
+			const Token& colonToken = GetToken(rightParenthesisTokenIndex + 1);
+			if (colonToken.Type != TokenType::Colon && isClosed) {
+				ERROR << "Excepted ':' after ')'.\n";
+				hasError = true;
+			}
+
+			m_Token = rightParenthesisTokenIndex + 1;
+		} else {
+			m_Token += validTokens;
+		}
+
+		if (nameToken.Type == TokenType::Identifier) {
+			m_CurrentStructure = nullptr;
+			m_CurrentFunction = &nameToken.Word;
+			if (m_Result.HasFunction(*m_CurrentFunction)) {
+				ERROR << "Duplicated function or procedure name '" << *m_CurrentFunction << "'.\n";
+				hasError = true;
+			}
+
+			sgn::FunctionIndex index = sgn::FunctionIndex::OperandIndex/*Dummy*/;
+			if (nameToken.Word != "entrypoint") {
+				index = m_Result.ByteFile.AddFunction(static_cast<std::uint16_t>(params.size()), hasResult);
+			}
+			m_Result.Functions.push_back(Function{ nullptr, nameToken.Word, index, {}, std::move(params) });
+		}
+
+		return SkipOtherTokens(hasError);
 	}
 	bool Parser::ParseLabel() {
 		return true; // TODO
