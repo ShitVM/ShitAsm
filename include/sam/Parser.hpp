@@ -54,7 +54,9 @@ namespace sam {
 	private:
 		void ResetState() noexcept;
 		const Token& GetToken(std::size_t i) const noexcept;
-		bool SkipOtherTokens(bool hasError);
+		bool Accept(const Token*& token, TokenType type) noexcept;
+		bool AcceptOr(const Token*& token, TokenType typeA, TokenType typeB) noexcept;
+		bool NextLine(bool hasError);
 
 		bool FirstPass();
 		bool SecondPass();

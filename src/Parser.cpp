@@ -61,18 +61,34 @@ namespace sam {
 		if (i >= m_Tokens.size()) return m_EmptyToken;
 		else return m_Tokens[i];
 	}
-	bool Parser::SkipOtherTokens(bool hasError) {
-		const Token& newLineToken = GetToken(++m_Token);
-		if (newLineToken.Type != TokenType::None && newLineToken.Type != TokenType::NewLine) {
-			ERROR << "Unexcepted tokens before end-of-line.\n";
-			return false;
-		}
-
-		const Token* token = &GetToken(m_Token);
-		while (token->Type != TokenType::None && token->Type != TokenType::NewLine) {
+	bool Parser::Accept(const Token*& token, TokenType type) noexcept {
+		const Token& currentToken = GetToken(m_Token);
+		if (currentToken.Type == type) {
+			token = &currentToken;
 			++m_Token;
+			return true;
+		} else return false;
+	}
+	bool Parser::AcceptOr(const Token*& token, TokenType typeA, TokenType typeB) noexcept {
+		const Token& currentToken = GetToken(m_Token);
+		if (currentToken.Type == typeA || currentToken.Type == typeB) {
+			token = &currentToken;
+			++m_Token;
+			return true;
+		} else return false;
+	}
+	bool Parser::NextLine(bool hasError) {
+		const Token* newLineToken = nullptr;
+		bool hasUnexceptedTokens = false;
+		while (!AcceptOr(newLineToken, TokenType::None, TokenType::NewLine)) {
+			++m_Token;
+			hasUnexceptedTokens = true;
 		}
 
+		if (hasUnexceptedTokens) {
+			ERROR << "Unexcepted tokens before end-of-line.\n";
+			hasError = true;
+		}
 		return !hasError;
 	}
 
@@ -159,7 +175,7 @@ namespace sam {
 		}
 
 		m_Token += validTokens;
-		return SkipOtherTokens(hasError);
+		return NextLine(hasError);
 	}
 	bool Parser::ParseFunction(bool hasResult) {
 		bool hasError = false;
@@ -261,7 +277,7 @@ namespace sam {
 			m_Result.Functions.push_back(Function{ nullptr, nameToken.Word, index, {}, std::move(params) });
 		}
 
-		return SkipOtherTokens(hasError);
+		return NextLine(hasError);
 	}
 	bool Parser::ParseLabel() {
 		if (m_CurrentFunction == nullptr) {
@@ -281,7 +297,7 @@ namespace sam {
 		currentFunction.Labels.push_back(Label{ nameToken.Word });
 
 		m_Token += 1;
-		return SkipOtherTokens(hasError);
+		return NextLine(hasError);
 	}
 }
 
