@@ -13,7 +13,7 @@ ShitBC 어셈블러
 ```
 $ git clone https://github.com/ShitVM/ShitAsm.git --recurse-submodules
 $ cd ShitAsm
-$ cmake --build .
+$ cmake --config --build .
 ```
 
 ## 사용법
