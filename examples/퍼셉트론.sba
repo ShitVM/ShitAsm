@@ -2,7 +2,7 @@ struct Vector2:
 	double first
 	double second
 
-func vectorDot(a, b):								; a: Vector2, b: Vector2
+func vectorDot(a, b):
 	; P = a.first * b.first
 	lea a
 	flea Vector2.first
@@ -29,7 +29,7 @@ struct Perceptron:
 
 	double weightedSum
 
-func evalPerceptron(p, input):						; p: Perceptron*, input: Vector2
+func evalPerceptron(p, input):
 	; P = p.Weight * input
 	load input
 	load p
@@ -51,17 +51,17 @@ func evalPerceptron(p, input):						; p: Perceptron*, input: Vector2
 	call activation
 	ret
 
-func activation(v):									; v: double
+func activation(v):
 	; y = x
 	load v
 	ret
 
-func dactivation(v):								; v: double
+func dactivation(v):
 	; y' = 1
 	push 1.0
 	ret
 
-proc trainPerceptron(p, alpha, input, output):		; p: Perceptron*, alpha: double, input: Vector2, output: double
+proc trainPerceptron(p, alpha, input, output):
 	; y = f(x)
 	load input
 	load p
