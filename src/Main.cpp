@@ -1,9 +1,12 @@
 #include <sam/Assembly.hpp>
 #include <sam/ExternModule.hpp>
+#include <sam/Lexer.hpp>
 #include <sam/Parser.hpp>
+#include <sgn/Generator.hpp>
 #include <svm/detail/FileSystem.hpp>
 
 #include <cstdlib>
+#include <fstream>
 #include <iostream>
 
 int main(int argc, char* argv[]) {
@@ -12,16 +15,31 @@ int main(int argc, char* argv[]) {
 		return EXIT_FAILURE;
 	}
 
-	const std::string input = argv[1];
-	std::string output;
-	if (argc >= 3) {
-		output = argv[2];
-	} else {
-		output = svm::detail::fs::path(input).filename().string() + ".sbf";
+	const svm::detail::fs::path input(argv[1]);
+	const std::string output = argc >= 3 ? argv[2] : input.stem().string() + ".sbf";
+	std::ifstream inputStream(input);
+	if (!inputStream) {
+		std::cout << "Error: Failed to open '" << input << "'.\n";
+		return EXIT_FAILURE;
 	}
 
-	sam::Assembly assembly;
-	sam::Parser parser(assembly, std::cout);
-	if (!parser.Parse(input)) return EXIT_FAILURE;
-	else return parser.Generate(output), EXIT_SUCCESS;
+	sam::Lexer lexer(input.string(), inputStream);
+	lexer.Lex();
+	if (lexer.HasMessage()) {
+		std::cout << lexer.GetMessages();
+		if (lexer.HasError()) return EXIT_FAILURE;
+	}
+
+	sam::Parser parser(input.string(), lexer.GetTokens());
+	parser.Parse();
+	if (parser.HasMessage()) {
+		std::cout << parser.GetMessages();
+		if (parser.HasError()) return EXIT_FAILURE;
+	}
+
+	const sam::Assembly assembly = parser.GetAssembly();
+	sgn::Generator generator(assembly.ByteFile);
+	generator.Generate(output);
+
+	return EXIT_SUCCESS;
 }
