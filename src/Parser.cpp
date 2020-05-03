@@ -270,30 +270,35 @@ namespace sam {
 		sgn::FunctionIndex index = sgn::FunctionIndex::OperandIndex/*Dummy*/;
 		if (nameToken->Word != "entrypoint") {
 			index = m_Result.ByteFile.AddFunction(static_cast<std::uint16_t>(params.size()), hasResult);
+		} else if (hasResult) {
+			ERROR << "Invalid function name 'entrypoint'.\n";
+			INFO << "It can be used only for procedure.\n";
+			hasError = true;
 		}
 		m_Result.Functions.push_back(Function{ nullptr, nameToken->Word, index, {}, std::move(params) });
 		return hasError;
 	}
 	bool Parser::ParseLabel() {
-		/*if (m_CurrentFunction == nullptr) {
+		const Token* nameToken = nullptr;
+		if (!Accept(nameToken, TokenType::Identifier)) {
+			ERROR << "Invalid label name.\n";
+			return true;
+		} else if (m_CurrentFunction == nullptr) {
 			ERROR << "Not belonged label.\n";
-			return false;
+			return true;
 		}
 
 		bool hasError = false;
-		Function& currentFunction = m_Result.GetFunction(*m_CurrentFunction);
 
-		const Token& nameToken = GetToken(m_Token);
-		if (currentFunction.HasLabel(nameToken.Word)) {
-			ERROR << "Duplicated label name '" << nameToken.Word << "'.\n";
+		Function& currentFunction = m_Result.GetFunction(*m_CurrentFunction);
+		if (currentFunction.HasLabel(nameToken->Word)) {
+			ERROR << "Duplicated label name '" << nameToken->Word << "'.\n";
 			hasError = true;
 		}
 
-		currentFunction.Labels.push_back(Label{ nameToken.Word });
-
-		m_Token += 1;
-		return NextLine(hasError);*/
-		return false;
+		currentFunction.Labels.push_back(Label{ nameToken->Word });
+		++m_Token;
+		return hasError;
 	}
 }
 
