@@ -2,7 +2,11 @@
 
 #include <sam/Assembly.hpp>
 #include <sam/Lexer.hpp>
+#include <sgn/Type.hpp>
 
+#include <cstddef>
+#include <cstdint>
+#include <optional>
 #include <sstream>
 #include <string>
 #include <vector>
@@ -10,13 +14,18 @@
 
 
 
-#include <cstddef>
-#include <cstdint>
 #include <fstream>
-#include <optional>
 #include <ostream>
 #include <string>
 #include <variant>
+
+namespace sam {
+	struct Type final {
+		sgn::Type ElementType;
+		std::string ElementTypeName;
+		std::optional<std::uint64_t> ElementCount;
+	};
+}
 
 namespace sam {
 	class Parser final {
@@ -56,27 +65,27 @@ namespace sam {
 		const Token& GetToken(std::size_t i) const noexcept;
 		bool Accept(const Token*& token, TokenType type) noexcept;
 		bool AcceptOr(const Token*& token, TokenType typeA, TokenType typeB) noexcept;
-		bool NextLine(bool hasError);
+		bool NextLine(int hasError);
 
-		bool Pass(bool(Parser::*function)(), bool isFirst);
+		bool Pass(int(Parser::*function)(), bool isFirst);
 		bool FirstPass();
 		bool SecondPass();
 		bool ThirdPass();
 		void GenerateBuilders();
 
-		bool ParsePrototype();
-
+		int ParsePrototypes();
 		bool ParseStructure();
 		bool ParseFunction(bool hasResult);
 		bool ParseLabel();
-	};
-}
 
-namespace sam {
-	struct Type final {
-		sgn::Type ElementType;
-		std::string ElementTypeName;
-		std::optional<std::uint64_t> ElementCount;
+		bool IgnoreStructure();
+		bool IgnoreFunction();
+		bool IgnoreLabel();
+
+		int ParseFields();
+		sgn::Type GetType(const std::string& name);
+		std::optional<Type> ParseType();
+		bool ParseField();
 	};
 }
 

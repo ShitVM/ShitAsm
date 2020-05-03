@@ -41,6 +41,9 @@ int main(int argc, char* argv[]) {
 	std::cout << "<Structures>\n";
 	for (const auto& s : assembly.Structures) {
 		std::cout << s.Name << '\n';
+		for (const auto& f : s.Fields) {
+			std::cout << '\t' << f.Name << '\n';
+		}
 	}
 
 	std::cout << "<Functions>\n";

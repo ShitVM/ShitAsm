@@ -47,6 +47,8 @@ namespace sam {
 	};
 
 	constexpr bool IsKeyword(TokenType type) noexcept;
+	constexpr bool IsTypeKeyword(TokenType type) noexcept;
+	constexpr bool IsInteger(TokenType type) noexcept;
 
 	using TokenData = std::variant<std::monostate, std::uint64_t, double, std::string>;
 

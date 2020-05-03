@@ -1,28 +1,26 @@
 #include <sam/Parser.hpp>
 
+#include <sam/Function.hpp>
+#include <sam/String.hpp>
+#include <sgn/ByteFile.hpp>
+#include <sgn/Structure.hpp>
+#include <svm/Type.hpp>
+
 #include <algorithm>
 #include <iterator>
 #include <memory>
+#include <unordered_map>
 #include <utility>
 
 
 
 #include <sam/ExternModule.hpp>
 
-#include <sam/Function.hpp>
-#include <sam/String.hpp>
-#include <sgn/ByteFile.hpp>
 #include <sgn/Generator.hpp>
-#include <sgn/Structure.hpp>
-#include <svm/Type.hpp>
 #include <svm/detail/FileSystem.hpp>
 
-#include <algorithm>
 #include <cctype>
 #include <limits>
-#include <unordered_map>
-#include <utility>
-#include <vector>
 
 namespace sam {
 	Parser::Parser(std::string path, std::vector<Token> tokens) noexcept
@@ -37,6 +35,9 @@ namespace sam {
 
 	void Parser::Parse() {
 		if (!FirstPass()) return;
+		ResetState();
+
+		if (!SecondPass()) return;
 		ResetState();
 
 		// TODO
@@ -79,7 +80,7 @@ namespace sam {
 			return true;
 		} else return false;
 	}
-	bool Parser::NextLine(bool hasError) {
+	bool Parser::NextLine(int hasError) {
 		const Token* newLineToken = nullptr;
 		bool hasUnexceptedTokens = false;
 		while (!AcceptOr(newLineToken, TokenType::None, TokenType::NewLine)) {
@@ -91,10 +92,10 @@ namespace sam {
 			ERROR << "Unexcepted tokens before end-of-line.\n";
 			hasError = true;
 		}
-		return !hasError;
+		return hasError == 1;
 	}
 
-	bool Parser::Pass(bool(Parser::*function)(), bool isFirst) {
+	bool Parser::Pass(int(Parser::*function)(), bool isFirst) {
 		bool hasError = false;
 		for (m_Token = 0; m_Token < m_Tokens.size();) {
 			m_EmptyToken.Line = m_Tokens[m_Token].Line;
@@ -112,10 +113,10 @@ namespace sam {
 		return !hasError;
 	}
 	bool Parser::FirstPass() {
-		return Pass(&Parser::ParsePrototype, true);
+		return Pass(&Parser::ParsePrototypes, true);
 	}
 	bool Parser::SecondPass() {
-		return true; // TODO
+		return Pass(&Parser::ParseFields, false);
 	}
 	bool Parser::ThirdPass() {
 		return true; // TODO
@@ -139,14 +140,13 @@ namespace sam {
 		}
 	}
 
-	bool Parser::ParsePrototype() {
+	int Parser::ParsePrototypes() {
 		const Token* token = nullptr;
 		if (Accept(token, TokenType::StructKeyword)) return ParseStructure();
 		else if (AcceptOr(token, TokenType::FuncKeyword, TokenType::ProcKeyword)) return ParseFunction(token->Type == TokenType::FuncKeyword);
 		else if (GetToken(m_Token + 1).Type == TokenType::Colon) return ParseLabel();
-		else return true;
+		else return 2;
 	}
-
 	bool Parser::ParseStructure() {
 		const Token* nameToken = nullptr;
 		if (!Accept(nameToken, TokenType::Identifier)) {
@@ -298,6 +298,134 @@ namespace sam {
 
 		currentFunction.Labels.push_back(Label{ nameToken->Word });
 		++m_Token;
+		return hasError;
+	}
+
+	bool Parser::IgnoreStructure() {
+		m_CurrentStructure = &GetToken(m_Token).Word;
+		m_CurrentFunction = nullptr;
+
+		m_Token += 2;
+		return false;
+	}
+	bool Parser::IgnoreFunction() {
+		m_CurrentStructure = nullptr;
+		m_CurrentFunction = &GetToken(m_Token).Word;
+
+		const Token* token = nullptr;
+		while (!Accept(token, TokenType::Colon)) {
+			++m_Token;
+		}
+
+		return false;
+	}
+	bool Parser::IgnoreLabel() {
+		m_Token += 2;
+		return false;
+	}
+
+	int Parser::ParseFields() {
+		const Token* token = nullptr;
+		if (Accept(token, TokenType::StructKeyword)) return IgnoreStructure();
+		else if (AcceptOr(token, TokenType::FuncKeyword, TokenType::ProcKeyword)) return IgnoreFunction();
+		else if (GetToken(m_Token + 1).Type == TokenType::Colon) return IgnoreLabel();
+		else if (m_CurrentStructure) return ParseField();
+		else return 2;
+	}
+	sgn::Type Parser::GetType(const std::string& name) {
+		static const std::unordered_map<std::string, sgn::Type> fundamental = {
+			{ "int", sgn::IntType },
+			{ "long", sgn::LongType },
+			{ "double", sgn::DoubleType },
+			{ "pointer", sgn::PointerType },
+			{ "gcpointer", sgn::GCPointerType },
+		};
+
+		const auto iter = fundamental.find(name);
+		if (iter != fundamental.end()) return svm::GetType(sgn::Structures(), iter->second->Code);
+
+		const auto structIter = m_Result.FindStructure(name);
+		if (structIter != m_Result.Structures.end()) return m_Result.ByteFile.GetStructureInfo(structIter->Index)->Type;
+		else return nullptr;
+	}
+	std::optional<Type> Parser::ParseType() {
+		const Token* nameToken = nullptr;
+		if (!Accept(nameToken, TokenType::Identifier)) {
+			if (AcceptOr(nameToken, TokenType::None, TokenType::NewLine)) {
+				ERROR << "Unexcepted end-of-line.\n";
+			} else if (Accept(nameToken, TokenType::LeftBracket)) {
+				ERROR << "Required type name.\n";
+			} else if (IsTypeKeyword(GetToken(m_Token).Type)) {
+				nameToken = &GetToken(m_Token++);
+				goto parseType;
+			} else {
+				ERROR << "Invalid function or procedure name.\n";
+			}
+			return std::nullopt;
+		}
+
+	parseType:
+		const sgn::Type type = GetType(nameToken->Word);
+
+		const Token* maybeLeftBracketToken = nullptr;
+		if (!Accept(maybeLeftBracketToken, TokenType::LeftBracket)) return Type{ type, nameToken->Word };
+
+		bool hasError = false;
+		std::uint64_t length = 0;
+
+		const Token* lengthOrRightBracketToken = nullptr;
+		if (Accept(lengthOrRightBracketToken, TokenType::RightBracket)) return Type{ type, nameToken->Word, 0 };
+		else if (Accept(lengthOrRightBracketToken, TokenType::Decimal)) {
+			ERROR << "Array's length must be integer.\n";
+			hasError = true;
+			length = 1; // Dummy
+		} else if (IsInteger(GetToken(m_Token).Type)) {
+			if ((length = std::get<std::uint64_t>(GetToken(m_Token++).Data)) == 0) {
+				ERROR << "Array's length cannot be zero.\n";
+				hasError = true;
+			}
+		} else {
+			ERROR << "Excepted ']' after '['.\n";
+			return std::nullopt;
+		}
+
+		const Token* rightBracketToken = nullptr;
+		if (!Accept(rightBracketToken, TokenType::RightBracket)) {
+			ERROR << "Excepted ']' after array's length.\n";
+			return std::nullopt;
+		} else return Type{ type, nameToken->Word, length };
+	}
+	bool Parser::ParseField() {
+		bool hasError = false;
+
+		const auto type = ParseType();
+		if (!type) return true;
+		else if (type->ElementCount && *type->ElementCount == 0) {
+			ERROR << "Required array's length.\n";
+			hasError = true;
+		}
+
+		const Token* nameToken = nullptr;
+		if (!Accept(nameToken, TokenType::Identifier)) {
+			if (AcceptOr(nameToken, TokenType::None, TokenType::NewLine)) {
+				ERROR << "Unexcepted end-of-line.\n";
+			} else {
+				ERROR << "Invalid field name.\n";
+			}
+			return true;
+		}
+
+		Structure& currentStructure = m_Result.GetStructure(*m_CurrentStructure);
+		const sgn::StructureIndex structIndex = currentStructure.Index;
+		sgn::StructureInfo* const structureInfo = m_Result.ByteFile.GetStructureInfo(structIndex);
+
+		if (currentStructure.HasField(nameToken->Word)) {
+			ERROR << "Duplicated field name '" << nameToken->Word << "'.\n";
+			hasError = true;
+		}
+
+		const sgn::FieldIndex index = structureInfo->AddField(type->ElementType, type->ElementCount.value_or(0));
+		currentStructure.Fields.push_back(Field{ nameToken->Word, index });
 		return hasError;
 	}
 }
