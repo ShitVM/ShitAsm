@@ -58,11 +58,13 @@ namespace sam {
 		bool AcceptOr(const Token*& token, TokenType typeA, TokenType typeB) noexcept;
 		bool NextLine(bool hasError);
 
+		bool Pass(bool(Parser::*function)(), bool isFirst);
 		bool FirstPass();
 		bool SecondPass();
 		bool ThirdPass();
-
 		void GenerateBuilders();
+
+		bool ParsePrototype();
 
 		bool ParseStructure();
 		bool ParseFunction(bool hasResult);

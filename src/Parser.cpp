@@ -85,37 +85,31 @@ namespace sam {
 			hasUnexceptedTokens = true;
 		}
 
-		if (hasUnexceptedTokens) {
+		if (hasUnexceptedTokens && !hasError) {
 			ERROR << "Unexcepted tokens before end-of-line.\n";
 			hasError = true;
 		}
 		return !hasError;
 	}
 
-	bool Parser::FirstPass() {
+	bool Parser::Pass(bool(Parser::*function)(), bool isFirst) {
 		bool hasError = false;
+		for (m_Token = 0; m_Token < m_Tokens.size();) {
+			hasError |= NextLine((this->*function)());
+		}
 
-		for (m_Token = 0; m_Token < m_Tokens.size(); ++m_Token) {
-			const Token& token = m_Tokens[m_Token];
-			if (token.Type == TokenType::StructKeyword) {
-				hasError |= !ParseStructure();
-			} else if (token.Type == TokenType::FuncKeyword || token.Type == TokenType::ProcKeyword) {
-				hasError |= !ParseFunction(token.Type == TokenType::FuncKeyword);
-			} else {
-				const Token& nextToken = GetToken(m_Token + 1);
-				if (token.Type == TokenType::Identifier && nextToken.Type == TokenType::Colon) {
-					hasError |= !ParseLabel();
-				}
+		if (isFirst) {
+			if (!m_Result.HasFunction("entrypoint")) {
+				MESSAGEBASE << "Error: There is no 'entrypoint' procedure.\n";
+				hasError = true;
 			}
+			GenerateBuilders();
 		}
 
-		if (!m_Result.HasFunction("entrypoint")) {
-			MESSAGEBASE << "Error: There is no 'entrypoint' procedure.\n";
-			hasError = true;
-		}
-
-		GenerateBuilders();
 		return !hasError;
+	}
+	bool Parser::FirstPass() {
+		return Pass(&Parser::ParsePrototype, true);
 	}
 	bool Parser::SecondPass() {
 		return true; // TODO
@@ -123,7 +117,6 @@ namespace sam {
 	bool Parser::ThirdPass() {
 		return true; // TODO
 	}
-
 	void Parser::GenerateBuilders() {
 		for (auto& func : m_Result.Functions) {
 			if (func.Name == "entrypoint") {
@@ -143,39 +136,45 @@ namespace sam {
 		}
 	}
 
+	bool Parser::ParsePrototype() {
+		const Token* token = nullptr;
+		if (Accept(token, TokenType::StructKeyword)) return ParseStructure();
+		else if (AcceptOr(token, TokenType::FuncKeyword, TokenType::ProcKeyword)) return ParseFunction(token->Type == TokenType::FuncKeyword);
+		else if (GetToken(m_Token + 1).Type == TokenType::Colon) return ParseLabel();
+		else return true;
+	}
+
 	bool Parser::ParseStructure() {
-		bool hasError = false;
-		std::size_t validTokens = 2;
-
-		const Token& nameToken = GetToken(m_Token + 1);
-		const Token& colonToken = GetToken(m_Token + 2);
-		if (nameToken.Type != TokenType::Identifier) {
-			ERROR << "Required structure name.\n";
-			if (IsKeyword(nameToken.Type)) {
-				INFO << "Keywords cannot be used as an identifier.\n";
+		const Token* nameToken = nullptr;
+		if (!Accept(nameToken, TokenType::Identifier)) {
+			if (AcceptOr(nameToken, TokenType::None, TokenType::NewLine)) {
+				ERROR << "Unexcepted end-of-line.\n";
+			} else if (Accept(nameToken, TokenType::Colon)) {
+				ERROR << "Required structure name.\n";
+			} else {
+				ERROR << "Invalid structure name.\n";
 			}
-			hasError = true;
-			--validTokens;
-		} else if (colonToken.Type != TokenType::Colon) {
+			return true;
+		}
+
+		const Token* colonToken = nullptr;
+		if (!Accept(colonToken, TokenType::Colon)) {
 			ERROR << "Excepted ':' after structure name.\n";
+			return true;
+		}
+
+		bool hasError = false;
+
+		m_CurrentStructure = &nameToken->Word;
+		m_CurrentFunction = nullptr;
+		if (m_Result.HasStructure(*m_CurrentStructure)) {
+			ERROR << "Duplicated structure name '" << *m_CurrentStructure << "'.\n";
 			hasError = true;
-			--validTokens;
 		}
 
-		if (nameToken.Type == TokenType::Identifier) {
-			m_CurrentStructure = &nameToken.Word;
-			m_CurrentFunction = nullptr;
-			if (m_Result.HasStructure(*m_CurrentStructure)) {
-				ERROR << "Duplicated structure name '" << *m_CurrentStructure << "'.\n";
-				hasError = true;
-			}
-
-			const sgn::StructureIndex index = m_Result.ByteFile.AddStructure();
-			m_Result.Structures.push_back(Structure{ *m_CurrentStructure, index });
-		}
-
-		m_Token += validTokens;
-		return NextLine(hasError);
+		const sgn::StructureIndex index = m_Result.ByteFile.AddStructure();
+		m_Result.Structures.push_back(Structure{ *m_CurrentStructure, index });
+		return hasError;
 	}
 	bool Parser::ParseFunction(bool hasResult) {
 		bool hasError = false;

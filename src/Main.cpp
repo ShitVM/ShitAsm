@@ -38,6 +38,12 @@ int main(int argc, char* argv[]) {
 	}
 
 	const auto assembly = parser.GetAssembly();
+	std::cout << "<Structures>\n";
+	for (const auto& s : assembly.Structures) {
+		std::cout << s.Name << '\n';
+	}
+
+	std::cout << "<Functions>\n";
 	for (const auto& f : assembly.Functions) {
 		std::cout << f.Name << '\n';
 		for (const auto& l : f.Labels) {
