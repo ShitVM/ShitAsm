@@ -1,6 +1,14 @@
 # ShitAsm
 ShitBC 어셈블러
 
+## 브랜치
+- master: 주 개발 브랜치
+- stable: 안정된 릴리즈 채널
+- unstable: 불안정한 릴리즈 채널
+- hotfix: 릴리즈 된 커밋에 존재하는 버그를 수정하는 개발 브랜치
+
+**주의**: 릴리즈 채널에는 커밋을 하거나 PR을 넣지 마세요!
+
 ## 컴파일
 ```
 $ git clone https://github.com/ShitVM/ShitAsm.git --recurse-submodules
