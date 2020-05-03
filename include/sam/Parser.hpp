@@ -112,69 +112,8 @@ namespace sam {
 		bool ParseAGCNewInstruction();
 
 		std::optional<sgn::FieldIndex> GetField();
-		std::optional<sgn::LocalVariableIndex> GetLocalVaraible(const std::string& name);
-	};
-}
-
-namespace sam {
-	class OldParser final {
-	private:
-		using Number = std::variant<bool, std::uint32_t, std::uint64_t, double>;
-
-	private:
-		Assembly& m_Assembly;
-		std::ifstream m_ReadStream;
-		std::string m_ReadPath;
-		std::ostream& m_ErrorStream;
-
-		std::string m_CurrentStructure;
-		std::string m_CurrentFunction;
-
-		std::string m_Line;
-		std::size_t m_LineNum = 0;
-
-	public:
-		OldParser(Assembly& assembly, std::ostream& errorStream) noexcept;
-		OldParser(const Assembly&) = delete;
-		~OldParser() = default;
-
-	public:
-		OldParser& operator=(const Assembly&) = delete;
-		bool operator==(const OldParser&) = delete;
-		bool operator!=(const OldParser&) = delete;
-
-	public:
-		bool Parse(const std::string& path);
-		void Generate(const std::string& path);
-
-	private:
-		bool SecondPass();
-		bool ThirdPass();
-
-		bool IsValidIdentifier(const std::string& identifier);
-		sgn::Type GetType(const std::string& name);
-		template<typename F>
-		bool IsValidIntegerLiteral(const std::string& literal, std::string& literalMut, F&& function);
-		std::string ReadOperand();
-
-		bool ParseField(Structure* structure);
-		bool ParseFunction(bool isProcedure);
-		bool ParseLabel();
-		bool ParseInstruction(Function* function);
-
-		std::optional<Type> ParseType(std::string& line);
-		Number ParseNumber(std::string& line);
-		template<typename F>
-		Number ParseInteger(const std::string& literal, std::string& literalMut, bool isNegative, int base, F&& function);
-		Number ParseBinInteger(const std::string& literal, std::string& literalMut, bool isNegative);
-		Number ParseOctInteger(const std::string& literal, std::string& literalMut, bool isNegative);
-		Number ParseDecInteger(const std::string& literal, std::string& literalMut, bool isNegative);
-		Number ParseHexInteger(const std::string& literal, std::string& literalMut, bool isNegative);
-		Number ParseDecimal(const std::string& literal, std::string& literalMut, bool isNegative);
-
-		std::optional<sgn::FieldIndex> GetField(const std::string& name);
 		std::optional<sgn::FunctionIndex> GetFunction(const std::string& name);
-		std::optional<sgn::LabelIndex> GetLabel(Function* function, const std::string& name);
-		std::optional<sgn::LocalVariableIndex> GetLocalVariable(Function* function, const std::string& name);
+		std::optional<sgn::LabelIndex> GetLabel(const std::string& name);
+		std::optional<sgn::LocalVariableIndex> GetLocalVaraible(const std::string& name);
 	};
 }
