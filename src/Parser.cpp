@@ -31,7 +31,7 @@ namespace sam {
 		if (!SecondPass()) return;
 		ResetState();
 
-		if (!ThirdPass()) return;
+		ThirdPass();
 	}
 	Assembly Parser::GetAssembly() noexcept {
 		return std::move(m_Result);
@@ -339,7 +339,7 @@ namespace sam {
 				}
 				return MakeNegative(static_cast<std::uint32_t>(value), maybeMinusToken);
 			} else if (literalToken->Suffix == "l") return MakeNegative(value, maybeMinusToken);
-			else if (value > std::numeric_limits<std::uint32_t>::max()) return MakeNegative(static_cast<std::uint32_t>(value), maybeMinusToken);
+			else if (value <= std::numeric_limits<std::uint32_t>::max()) return MakeNegative(static_cast<std::uint32_t>(value), maybeMinusToken);
 			else return MakeNegative(value, maybeMinusToken);
 		} else if (Accept(literalToken, TokenType::Decimal)) return MakeNegative(std::get<double>(literalToken->Data), maybeMinusToken);
 		else return std::monostate();
@@ -484,8 +484,10 @@ namespace sam {
 		const Token* token = nullptr;
 		if (Accept(token, TokenType::StructKeyword)) return IgnoreStructure();
 		else if (AcceptOr(token, TokenType::FuncKeyword, TokenType::ProcKeyword)) return IgnoreFunction();
-		else if (GetToken(m_Token + 1).Type == TokenType::Colon) return IgnoreLabel();
-		else if (m_CurrentStructure) return 2;
+		else if (GetToken(m_Token + 1).Type == TokenType::Colon) {
+			m_CurrentFunction->Builder->AddLabel(GetToken(m_Token).Word);
+			return IgnoreLabel();
+		} else if (m_CurrentStructure) return 2;
 		else return ParseInstruction();
 	}
 	bool Parser::ParseInstruction() {
