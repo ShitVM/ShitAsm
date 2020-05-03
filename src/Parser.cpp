@@ -1,5 +1,6 @@
 #include <sam/Parser.hpp>
 
+#include <sam/ExternModule.hpp>
 #include <sam/String.hpp>
 #include <sgn/ByteFile.hpp>
 #include <svm/Type.hpp>
@@ -11,13 +12,6 @@
 #include <memory>
 #include <unordered_map>
 #include <utility>
-
-
-
-#include <sam/ExternModule.hpp>
-
-#include <sgn/Generator.hpp>
-#include <svm/detail/FileSystem.hpp>
 
 namespace sam {
 	Parser::Parser(std::string path, std::vector<Token> tokens) noexcept
@@ -86,7 +80,7 @@ namespace sam {
 			hasUnexceptedTokens = true;
 		}
 
-		if (hasUnexceptedTokens && !hasError) {
+		if (hasUnexceptedTokens && hasError == 0) {
 			ERROR << "Unexcepted tokens before end-of-line.\n";
 			hasError = true;
 		}
@@ -246,7 +240,7 @@ namespace sam {
 				ERROR << "Duplicated parameter name '" << *duplicated << "'.\n";
 				hasError = true;
 			}
-			std::transform(params.begin(), params.end(), std::back_inserter(params), [](auto& name) -> LocalVariable {
+			std::transform(strParams.begin(), strParams.end(), std::back_inserter(params), [](auto& name) -> LocalVariable {
 				return { std::move(name) };
 			});
 
@@ -331,6 +325,49 @@ namespace sam {
 		else if (m_CurrentStructure) return ParseField();
 		else return 2;
 	}
+	std::variant<std::monostate, std::int32_t, std::uint32_t, std::int64_t, std::uint64_t, double> Parser::ParseNumber() {
+		const Token* maybeMinusToken = nullptr;
+		Accept(maybeMinusToken, TokenType::Minus);
+
+		const Token* literalToken = nullptr;
+		if (IsInteger(GetToken(m_Token).Type)) {
+			literalToken = &GetToken(m_Token++);
+			const std::uint64_t value = std::get<std::uint64_t>(literalToken->Data);
+			if (literalToken->Suffix == "i") {
+				if (value > std::numeric_limits<std::uint32_t>::max()) {
+					WARNING << "Overflowed integer literal.\n";
+				}
+				return MakeNegative(static_cast<std::uint32_t>(value), maybeMinusToken);
+			} else if (literalToken->Suffix == "l") return MakeNegative(value, maybeMinusToken);
+			else if (value > std::numeric_limits<std::uint32_t>::max()) return MakeNegative(static_cast<std::uint32_t>(value), maybeMinusToken);
+			else return MakeNegative(value, maybeMinusToken);
+		} else if (Accept(literalToken, TokenType::Decimal)) return MakeNegative(std::get<double>(literalToken->Data), maybeMinusToken);
+		else return std::monostate();
+	}
+	std::variant<std::monostate, std::int32_t, std::uint32_t, std::int64_t, std::uint64_t, double> Parser::MakeNegative(std::variant<std::uint32_t, std::uint64_t, double> literal, bool isNegative) {
+		if (isNegative) {
+			if (std::holds_alternative<std::uint32_t>(literal)) {
+				const std::uint32_t value = std::get<std::uint32_t>(literal);
+				if (value > 2147483648/*2^31*/) {
+					WARNING << "Overflowed integer literal.\n";
+				}
+				return static_cast<std::int32_t>(value);
+			} else if (std::holds_alternative<std::uint64_t>(literal)) {
+				const std::uint64_t value = std::get<std::uint64_t>(literal);
+				if (value > 922337236854775808/*2^63*/) {
+					WARNING << "Overflowed integer literal.\n";
+				}
+				return static_cast<std::int64_t>(value);
+			} else if (std::holds_alternative<double>(literal)) return -std::get<double>(literal);
+			else return std::monostate();
+		} else return std::visit([](auto value) -> std::variant<std::monostate, std::int32_t, std::uint32_t, std::int64_t, std::uint64_t, double> {
+			return value;
+		}, literal);
+	}
+	bool Parser::IsNegative(std::variant<std::monostate, std::int32_t, std::uint32_t, std::int64_t, std::uint64_t, double> value) {
+		if (std::holds_alternative<double>(value)) return std::get<double>(value) < 0;
+		else return std::holds_alternative<std::int32_t>(value) || std::holds_alternative<std::int64_t>(value);
+	}
 	sgn::Type Parser::GetType(const std::string& name) {
 		static const std::unordered_map<std::string, sgn::Type> fundamental = {
 			{ "int", sgn::IntType },
@@ -379,9 +416,22 @@ namespace sam {
 			hasError = true;
 			length = 1; // Dummy
 		} else if (IsInteger(GetToken(m_Token).Type)) {
-			if ((length = std::get<std::uint64_t>(GetToken(m_Token++).Data)) == 0) {
-				ERROR << "Array's length cannot be zero.\n";
+			const auto lengthTemp = ParseNumber();
+			if (IsNegative(lengthTemp)) {
+				ERROR << "Array's length cannot be negative.\n";
 				hasError = true;
+				length = 1; // Dummy
+			} else {
+				if (std::holds_alternative<std::uint32_t>(lengthTemp)) {
+					length = std::get<std::uint32_t>(lengthTemp);
+				} else if (std::holds_alternative<std::uint64_t>(lengthTemp)) {
+					length = std::get<std::uint64_t>(lengthTemp);
+				}
+
+				if ((length = std::get<std::uint64_t>(GetToken(m_Token++).Data)) == 0) {
+					ERROR << "Array's length cannot be zero.\n";
+					hasError = true;
+				}
 			}
 		} else {
 			ERROR << "Excepted ']' after '['.\n";
@@ -435,7 +485,7 @@ namespace sam {
 		if (Accept(token, TokenType::StructKeyword)) return IgnoreStructure();
 		else if (AcceptOr(token, TokenType::FuncKeyword, TokenType::ProcKeyword)) return IgnoreFunction();
 		else if (GetToken(m_Token + 1).Type == TokenType::Colon) return IgnoreLabel();
-		else if (m_CurrentStructure) return NextLine(2);
+		else if (m_CurrentStructure) return 2;
 		else return ParseInstruction();
 	}
 	bool Parser::ParseInstruction() {
@@ -527,36 +577,29 @@ namespace sam {
 		return false;
 	}
 	bool Parser::ParsePushInstruction() {
-		const Token* valueToken = nullptr;
-		if (IsInteger(GetToken(m_Token).Type)) {
-			valueToken = &GetToken(m_Token++);
-			const std::uint64_t value = std::get<std::uint64_t>(valueToken->Data);
-			if (valueToken->Suffix == "i") {
-				if (value > std::numeric_limits<std::uint32_t>::max()) {
-					WARNING << "Overflowed integer literal.\n";
-				}
-				const auto inx = m_Result.ByteFile.AddIntConstant(static_cast<std::uint32_t>(value));
+		const auto number = ParseNumber();
+		const Token* structureToken = nullptr;
+		if (!std::holds_alternative<std::monostate>(number)) {
+			if (std::holds_alternative<std::int32_t>(number)) {
+				const auto inx = m_Result.ByteFile.AddIntConstant(static_cast<std::uint32_t>(std::get<std::int32_t>(number)));
 				m_CurrentFunction->Builder->Push(inx);
-			} else if (valueToken->Suffix == "l") {
-				const auto inx = m_Result.ByteFile.AddLongConstant(value);
+			} else if (std::holds_alternative<std::uint32_t>(number)) {
+				const auto inx = m_Result.ByteFile.AddIntConstant(std::get<std::uint32_t>(number));
+				m_CurrentFunction->Builder->Push(inx);
+			} else if (std::holds_alternative<std::int64_t>(number)) {
+				const auto inx = m_Result.ByteFile.AddLongConstant(static_cast<std::uint64_t>(std::get<std::int64_t>(number)));
+				m_CurrentFunction->Builder->Push(inx);
+			} else if (std::holds_alternative<std::uint64_t>(number)) {
+				const auto inx = m_Result.ByteFile.AddLongConstant(std::get<std::uint64_t>(number));
 				m_CurrentFunction->Builder->Push(inx);
 			} else {
-				if (value > std::numeric_limits<std::uint32_t>::max()) {
-					const auto inx = m_Result.ByteFile.AddIntConstant(static_cast<std::uint32_t>(value));
-					m_CurrentFunction->Builder->Push(inx);
-				} else {
-					const auto inx = m_Result.ByteFile.AddLongConstant(value);
-					m_CurrentFunction->Builder->Push(inx);
-				}
+				const auto inx = m_Result.ByteFile.AddDoubleConstant(std::get<double>(number));
+				m_CurrentFunction->Builder->Push(inx);
 			}
-		} else if (Accept(valueToken, TokenType::Decimal)) {
-			const double value = std::get<double>(valueToken->Data);
-			const auto inx = m_Result.ByteFile.AddDoubleConstant(value);
-			m_CurrentFunction->Builder->Push(inx);
-		} else if (Accept(valueToken, TokenType::Identifier)) {
-			const auto structure = m_Result.FindStructure(valueToken->Word);
+		} else if (Accept(structureToken, TokenType::Identifier)) {
+			const auto structure = m_Result.FindStructure(structureToken->Word);
 			if (structure == m_Result.Structures.end()) {
-				ERROR << "Nonexistent structure name '" << valueToken->Word << "'.\n";
+				ERROR << "Nonexistent structure name '" << structureToken->Word << "'.\n";
 				return true;
 			}
 			m_CurrentFunction->Builder->Push(structure->Index);

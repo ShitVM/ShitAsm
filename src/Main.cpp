@@ -1,9 +1,9 @@
+#include <sam/Assembly.hpp>
+#include <sam/ExternModule.hpp>
 #include <sam/Lexer.hpp>
 #include <sam/Parser.hpp>
+#include <sgn/Generator.hpp>
 #include <svm/detail/FileSystem.hpp>
-
-// Temp
-#include <sam/ExternModule.hpp>
 
 #include <cstdlib>
 #include <fstream>
@@ -37,22 +37,9 @@ int main(int argc, char* argv[]) {
 		if (parser.HasError()) return EXIT_FAILURE;
 	}
 
-	const auto assembly = parser.GetAssembly();
-	std::cout << "<Structures>\n";
-	for (const auto& s : assembly.Structures) {
-		std::cout << s.Name << '\n';
-		for (const auto& f : s.Fields) {
-			std::cout << '\t' << f.Name << '\n';
-		}
-	}
-
-	std::cout << "<Functions>\n";
-	for (const auto& f : assembly.Functions) {
-		std::cout << f.Name << '\n';
-		for (const auto& l : f.Labels) {
-			std::cout << '\t' << l.Name << '\n';
-		}
-	}
+	const sam::Assembly assembly = parser.GetAssembly();
+	sgn::Generator generator(assembly.ByteFile);
+	generator.Generate(output);
 
 	return EXIT_SUCCESS;
 }
