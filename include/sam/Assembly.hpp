@@ -4,6 +4,7 @@
 #include <sam/Structure.hpp>
 #include <sgn/ByteFile.hpp>
 
+#include <string>
 #include <vector>
 
 namespace sam {

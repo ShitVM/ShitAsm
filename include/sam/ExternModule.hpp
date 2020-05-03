@@ -4,7 +4,6 @@
 #include <sgn/Operand.hpp>
 
 #include <string>
-#include <vector>
 
 namespace sam {
 	struct ExternModule final {
