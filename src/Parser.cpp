@@ -28,10 +28,12 @@ namespace sam {
 	Parser::Parser(std::string path, std::vector<Token> tokens) noexcept
 		: m_Path(std::move(path)), m_Tokens(std::move(tokens)) {}
 
+#define CURRENT_TOKEN (&GetToken(m_Token))
+
 #define MESSAGEBASE m_ErrorStream << "In file '" << m_Path << "':\n    "
-#define INFO (m_HasInfo = true, MESSAGEBASE) << "Info: Line " << m_Tokens[m_Token].Line << ", "
-#define WARNING (m_HasWarning = true, MESSAGEBASE) << "Warning: Line " << m_Tokens[m_Token].Line << ", "
-#define ERROR (m_HasError = true, MESSAGEBASE) << "Error: Line " << m_Tokens[m_Token].Line << ", "
+#define INFO (m_HasInfo = true, MESSAGEBASE) << "Info: Line " << CURRENT_TOKEN->Line << ", "
+#define WARNING (m_HasWarning = true, MESSAGEBASE) << "Warning: Line " << CURRENT_TOKEN->Line << ", "
+#define ERROR (m_HasError = true, MESSAGEBASE) << "Error: Line " << CURRENT_TOKEN->Line << ", "
 
 	void Parser::Parse() {
 		if (!FirstPass()) return;
@@ -95,6 +97,7 @@ namespace sam {
 	bool Parser::Pass(bool(Parser::*function)(), bool isFirst) {
 		bool hasError = false;
 		for (m_Token = 0; m_Token < m_Tokens.size();) {
+			m_EmptyToken.Line = m_Tokens[m_Token].Line;
 			hasError |= NextLine((this->*function)());
 		}
 
@@ -177,67 +180,65 @@ namespace sam {
 		return hasError;
 	}
 	bool Parser::ParseFunction(bool hasResult) {
-		bool hasError = false;
-		std::size_t validTokens = 2;
-
-		const Token& nameToken = GetToken(m_Token + 1);
-		const Token& colonOrParamBeginToken = GetToken(m_Token + 2);
-		if (nameToken.Type != TokenType::Identifier) {
-			ERROR << "Required function or procedure name.\n";
-			if (IsKeyword(nameToken.Type)) {
-				INFO << "Keywords cannot be used as an identifier.\n";
+		const Token* nameToken = nullptr;
+		if (!Accept(nameToken, TokenType::Identifier)) {
+			if (AcceptOr(nameToken, TokenType::None, TokenType::NewLine)) {
+				ERROR << "Unexcepted end-of-line.\n";
+			} else if (Accept(nameToken, TokenType::Colon)) {
+				ERROR << "Required function or procedure name.\n";
+			} else {
+				ERROR << "Invalid function or procedure name.\n";
 			}
-			hasError = true;
-			--validTokens;
-		} else if (colonOrParamBeginToken.Type != TokenType::Colon && colonOrParamBeginToken.Type != TokenType::LeftParenthesis) {
-			ERROR << "Excepted ':' after function or procedure name.\n";
-			hasError = true;
-			--validTokens;
+			return true;
 		}
 
+		const Token* colonOrParamBeginToken = nullptr;
+		if (!AcceptOr(colonOrParamBeginToken, TokenType::Colon, TokenType::LeftParenthesis)) {
+			ERROR << "Excepted ':' after function or procedure name.\n";
+			return true;
+		}
+
+		bool hasError = false;
+
 		std::vector<LocalVariable> params;
-		if (colonOrParamBeginToken.Type == TokenType::LeftParenthesis) {
-			std::size_t rightParenthesisTokenIndex = m_Token + 3;
-			bool isClosed = true;
-			while (GetToken(rightParenthesisTokenIndex).Type != TokenType::RightParenthesis) {
-				const Token& token = GetToken(rightParenthesisTokenIndex);
-				if (token.Type == TokenType::None || token.Type == TokenType::NewLine) {
-					ERROR << "Unexcepted end-of-line after '" << GetToken(rightParenthesisTokenIndex - 1).Word << "'.\n";
-					isClosed = false;
-					hasError = true;
-					break;
-				} else if (token.Type == TokenType::Colon) {
-					ERROR << "Excepted ')' before ':'.\n";
-					isClosed = false;
-					hasError = true;
-					break;
-				}
-
-				++rightParenthesisTokenIndex;
-			}
-
+		if (colonOrParamBeginToken->Type == TokenType::LeftParenthesis) {
 			std::vector<std::string> strParams;
-			const Token* before = &colonOrParamBeginToken;
-			for (std::size_t i = m_Token + 3; i < rightParenthesisTokenIndex; ++i) {
-				const Token& token = GetToken(i);
-				if (token.Type == TokenType::Identifier) {
-					if (before->Type == TokenType::Identifier) {
-						ERROR << "Excepted ',' after '" << before->Word << "'.\n";
+
+			const Token* token = nullptr;
+			const Token* beforeToken = nullptr;
+			while (true) {
+				if (AcceptOr(token, TokenType::None, TokenType::NewLine)) {
+					ERROR << "Unexcepted end-of-line.\n";
+					hasError = true;
+					break;
+				} else if (Accept(token, TokenType::RightParenthesis)) break;
+				else if (Accept(token, TokenType::Identifier)) {
+					if (beforeToken && beforeToken->Type == TokenType::Identifier) {
+						ERROR << "Excepted ',' after parameter name.\n";
 						hasError = true;
 					} else {
-						strParams.push_back(token.Word);
+						strParams.push_back(token->Word);
 					}
-				} else if (token.Type == TokenType::Comma) {
-					if (before->Type == TokenType::Comma) {
-						ERROR << "Excepted identifier after ','.\n";
+				} else if (Accept(token, TokenType::Comma)) {
+					if (!beforeToken) {
+						ERROR << "Excepted ')' after '('.\n";
+						hasError = true;
+					} else if (beforeToken->Type == TokenType::Comma) {
+						ERROR << "Excepted parameter name after ','.\n";
 						hasError = true;
 					}
 				} else {
-					ERROR << "Unexcepted token after '" << before->Word << "'.\n";
+					if (!beforeToken) {
+						ERROR << "Excepted ')' after '('.\n";
+					} else if (beforeToken->Type == TokenType::Identifier) {
+						ERROR << "Excepted ')' after parameter name.\n";
+					} else if (beforeToken->Type == TokenType::Comma) {
+						ERROR << "Excepted parameter name after ','.\n";
+					}
 					hasError = true;
 				}
 
-				before = &token;
+				beforeToken = token;
 			}
 
 			std::vector<std::string> sortedStrParams = strParams;
@@ -246,40 +247,35 @@ namespace sam {
 				ERROR << "Duplicated parameter name '" << *duplicated << "'.\n";
 				hasError = true;
 			}
-			std::transform(sortedStrParams.begin(), sortedStrParams.end(), std::back_inserter(params), [](auto& name) {
-				return LocalVariable{ std::move(name) };
+			std::transform(params.begin(), params.end(), std::back_inserter(params), [](auto& name) -> LocalVariable {
+				return { std::move(name) };
 			});
 
-			const Token& colonToken = GetToken(rightParenthesisTokenIndex + 1);
-			if (colonToken.Type != TokenType::Colon && isClosed) {
-				ERROR << "Excepted ':' after ')'.\n";
-				hasError = true;
-			}
-
-			m_Token = rightParenthesisTokenIndex + 1;
-		} else {
-			m_Token += validTokens;
+			if (token->Type == TokenType::RightParenthesis) {
+				const Token* colonToken = nullptr;
+				if (!Accept(colonToken, TokenType::Colon)) {
+					ERROR << "Excepted ':' after ')'.\n";
+					return true;
+				}
+			} else return true;
 		}
 
-		if (nameToken.Type == TokenType::Identifier) {
-			m_CurrentStructure = nullptr;
-			m_CurrentFunction = &nameToken.Word;
-			if (m_Result.HasFunction(*m_CurrentFunction)) {
-				ERROR << "Duplicated function or procedure name '" << *m_CurrentFunction << "'.\n";
-				hasError = true;
-			}
-
-			sgn::FunctionIndex index = sgn::FunctionIndex::OperandIndex/*Dummy*/;
-			if (nameToken.Word != "entrypoint") {
-				index = m_Result.ByteFile.AddFunction(static_cast<std::uint16_t>(params.size()), hasResult);
-			}
-			m_Result.Functions.push_back(Function{ nullptr, nameToken.Word, index, {}, std::move(params) });
+		m_CurrentStructure = nullptr;
+		m_CurrentFunction = &nameToken->Word;
+		if (m_Result.HasFunction(*m_CurrentFunction)) {
+			ERROR << "Duplicated function or procedure name '" << *m_CurrentFunction << "'.\n";
+			hasError = true;
 		}
 
-		return NextLine(hasError);
+		sgn::FunctionIndex index = sgn::FunctionIndex::OperandIndex/*Dummy*/;
+		if (nameToken->Word != "entrypoint") {
+			index = m_Result.ByteFile.AddFunction(static_cast<std::uint16_t>(params.size()), hasResult);
+		}
+		m_Result.Functions.push_back(Function{ nullptr, nameToken->Word, index, {}, std::move(params) });
+		return hasError;
 	}
 	bool Parser::ParseLabel() {
-		if (m_CurrentFunction == nullptr) {
+		/*if (m_CurrentFunction == nullptr) {
 			ERROR << "Not belonged label.\n";
 			return false;
 		}
@@ -296,7 +292,8 @@ namespace sam {
 		currentFunction.Labels.push_back(Label{ nameToken.Word });
 
 		m_Token += 1;
-		return NextLine(hasError);
+		return NextLine(hasError);*/
+		return false;
 	}
 }
 
