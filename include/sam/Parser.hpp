@@ -1,7 +1,10 @@
 #pragma once
 
 #include <sam/Assembly.hpp>
+#include <sam/Function.hpp>
 #include <sam/Lexer.hpp>
+#include <sam/Structure.hpp>
+#include <sgn/Operand.hpp>
 #include <sgn/Type.hpp>
 
 #include <cstddef>
@@ -36,8 +39,8 @@ namespace sam {
 
 		std::size_t m_Token = 0;
 		Token m_EmptyToken;
-		const std::string* m_CurrentStructure = nullptr;
-		const std::string* m_CurrentFunction = nullptr;
+		Structure* m_CurrentStructure = nullptr;
+		Function* m_CurrentFunction = nullptr;
 
 		Assembly m_Result;
 		bool m_HasError = false;
@@ -86,6 +89,30 @@ namespace sam {
 		sgn::Type GetType(const std::string& name);
 		std::optional<Type> ParseType();
 		bool ParseField();
+
+		int ParseInstructions();
+		bool ParseInstruction();
+		bool ParsePushInstruction();
+		bool ParseLoadInstruction();
+		bool ParseStoreInstruction();
+		bool ParseLeaInstruction();
+		bool ParseFLeaInstruction();
+		bool ParseJmpInstruction();
+		bool ParseJeInstruction();
+		bool ParseJneInstruction();
+		bool ParseJaInstruction();
+		bool ParseJaeInstruction();
+		bool ParseJbInstruction();
+		bool ParseJbeInstruction();
+		bool ParseCallInstruction();
+		bool ParseNewInstruction();
+		bool ParseGCNewInstruction();
+		bool ParseAPushInstruction();
+		bool ParseANewInstruction();
+		bool ParseAGCNewInstruction();
+
+		std::optional<sgn::FieldIndex> GetField();
+		std::optional<sgn::LocalVariableIndex> GetLocalVaraible(const std::string& name);
 	};
 }
 

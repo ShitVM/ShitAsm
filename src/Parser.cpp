@@ -1,13 +1,13 @@
 #include <sam/Parser.hpp>
 
-#include <sam/Function.hpp>
 #include <sam/String.hpp>
 #include <sgn/ByteFile.hpp>
-#include <sgn/Structure.hpp>
 #include <svm/Type.hpp>
 
 #include <algorithm>
+#include <cctype>
 #include <iterator>
+#include <limits>
 #include <memory>
 #include <unordered_map>
 #include <utility>
@@ -18,9 +18,6 @@
 
 #include <sgn/Generator.hpp>
 #include <svm/detail/FileSystem.hpp>
-
-#include <cctype>
-#include <limits>
 
 namespace sam {
 	Parser::Parser(std::string path, std::vector<Token> tokens) noexcept
@@ -40,7 +37,7 @@ namespace sam {
 		if (!SecondPass()) return;
 		ResetState();
 
-		// TODO
+		if (!ThirdPass()) return;
 	}
 	Assembly Parser::GetAssembly() noexcept {
 		return std::move(m_Result);
@@ -58,7 +55,8 @@ namespace sam {
 
 	void Parser::ResetState() noexcept {
 		m_Token = 0;
-		m_CurrentStructure = m_CurrentFunction = nullptr;
+		m_CurrentStructure = nullptr;
+		m_CurrentFunction = nullptr;
 	}
 	const Token& Parser::GetToken(std::size_t i) const noexcept {
 		if (i >= m_Tokens.size()) return m_EmptyToken;
@@ -119,7 +117,7 @@ namespace sam {
 		return Pass(&Parser::ParseFields, false);
 	}
 	bool Parser::ThirdPass() {
-		return true; // TODO
+		return Pass(&Parser::ParseInstructions, false);
 	}
 	void Parser::GenerateBuilders() {
 		for (auto& func : m_Result.Functions) {
@@ -168,15 +166,16 @@ namespace sam {
 
 		bool hasError = false;
 
-		m_CurrentStructure = &nameToken->Word;
-		m_CurrentFunction = nullptr;
-		if (m_Result.HasStructure(*m_CurrentStructure)) {
-			ERROR << "Duplicated structure name '" << *m_CurrentStructure << "'.\n";
+		if (m_Result.HasStructure(nameToken->Word)) {
+			ERROR << "Duplicated structure name '" << nameToken->Word << "'.\n";
 			hasError = true;
 		}
 
 		const sgn::StructureIndex index = m_Result.ByteFile.AddStructure();
-		m_Result.Structures.push_back(Structure{ *m_CurrentStructure, index });
+		m_Result.Structures.push_back(Structure{ nameToken->Word, index });
+
+		m_CurrentStructure = &m_Result.Structures.back();
+		m_CurrentFunction = nullptr;
 		return hasError;
 	}
 	bool Parser::ParseFunction(bool hasResult) {
@@ -260,10 +259,8 @@ namespace sam {
 			} else return true;
 		}
 
-		m_CurrentStructure = nullptr;
-		m_CurrentFunction = &nameToken->Word;
-		if (m_Result.HasFunction(*m_CurrentFunction)) {
-			ERROR << "Duplicated function or procedure name '" << *m_CurrentFunction << "'.\n";
+		if (m_Result.HasFunction(nameToken->Word)) {
+			ERROR << "Duplicated function or procedure name '" << nameToken->Word << "'.\n";
 			hasError = true;
 		}
 
@@ -276,6 +273,9 @@ namespace sam {
 			hasError = true;
 		}
 		m_Result.Functions.push_back(Function{ nullptr, nameToken->Word, index, {}, std::move(params) });
+
+		m_CurrentStructure = nullptr;
+		m_CurrentFunction = &m_Result.Functions.back();
 		return hasError;
 	}
 	bool Parser::ParseLabel() {
@@ -290,19 +290,18 @@ namespace sam {
 
 		bool hasError = false;
 
-		Function& currentFunction = m_Result.GetFunction(*m_CurrentFunction);
-		if (currentFunction.HasLabel(nameToken->Word)) {
+		if (m_CurrentFunction->HasLabel(nameToken->Word)) {
 			ERROR << "Duplicated label name '" << nameToken->Word << "'.\n";
 			hasError = true;
 		}
 
-		currentFunction.Labels.push_back(Label{ nameToken->Word });
+		m_CurrentFunction->Labels.push_back(Label{ nameToken->Word });
 		++m_Token;
 		return hasError;
 	}
 
 	bool Parser::IgnoreStructure() {
-		m_CurrentStructure = &GetToken(m_Token).Word;
+		m_CurrentStructure = &m_Result.GetStructure(GetToken(m_Token).Word);
 		m_CurrentFunction = nullptr;
 
 		m_Token += 2;
@@ -310,7 +309,7 @@ namespace sam {
 	}
 	bool Parser::IgnoreFunction() {
 		m_CurrentStructure = nullptr;
-		m_CurrentFunction = &GetToken(m_Token).Word;
+		m_CurrentFunction = &m_Result.GetFunction(GetToken(m_Token).Word);
 
 		const Token* token = nullptr;
 		while (!Accept(token, TokenType::Colon)) {
@@ -415,18 +414,283 @@ namespace sam {
 			return true;
 		}
 
-		Structure& currentStructure = m_Result.GetStructure(*m_CurrentStructure);
-		const sgn::StructureIndex structIndex = currentStructure.Index;
+		const sgn::StructureIndex structIndex = m_CurrentStructure->Index;
 		sgn::StructureInfo* const structureInfo = m_Result.ByteFile.GetStructureInfo(structIndex);
 
-		if (currentStructure.HasField(nameToken->Word)) {
+		if (m_CurrentStructure->HasField(nameToken->Word)) {
 			ERROR << "Duplicated field name '" << nameToken->Word << "'.\n";
 			hasError = true;
 		}
 
 		const sgn::FieldIndex index = structureInfo->AddField(type->ElementType, type->ElementCount.value_or(0));
-		currentStructure.Fields.push_back(Field{ nameToken->Word, index });
+		m_CurrentStructure->Fields.push_back(Field{ nameToken->Word, index });
 		return hasError;
+	}
+
+	int Parser::ParseInstructions() {
+		const Token* token = nullptr;
+		if (Accept(token, TokenType::StructKeyword)) return IgnoreStructure();
+		else if (AcceptOr(token, TokenType::FuncKeyword, TokenType::ProcKeyword)) return IgnoreFunction();
+		else if (GetToken(m_Token + 1).Type == TokenType::Colon) return IgnoreLabel();
+		else if (m_CurrentStructure) return NextLine(2);
+		else return ParseInstruction();
+	}
+	bool Parser::ParseInstruction() {
+		const Token* nameToken = nullptr;
+		if (!Accept(nameToken, TokenType::Identifier)) {
+			if (AcceptOr(nameToken, TokenType::None, TokenType::NewLine)) return false;
+			else {
+				ERROR << "Invalid mnemonic.\n";
+				return true;
+			}
+		} else if (m_CurrentFunction == nullptr) {
+			ERROR << "Not belonged instruction.\n";
+			return true;
+		}
+
+		std::string mnemonic = nameToken->Word;
+		std::transform(mnemonic.begin(), mnemonic.end(), mnemonic.begin(), [](char c) {
+			return static_cast<char>(std::tolower(c));
+		});
+
+		switch (CRC32(mnemonic)) {
+		case "nop"_h: m_CurrentFunction->Builder->Nop(); break;
+
+		case "push"_h: return ParsePushInstruction();
+		case "pop"_h: m_CurrentFunction->Builder->Pop(); break;
+		case "load"_h: return ParseLoadInstruction();
+		case "store"_h: return ParseStoreInstruction();
+		case "lea"_h: return ParseLeaInstruction();
+		case "flea"_h: return ParseFLeaInstruction();
+		case "tload"_h: m_CurrentFunction->Builder->TLoad(); break;
+		case "tstore"_h: m_CurrentFunction->Builder->TStore(); break;
+		case "copy"_h: m_CurrentFunction->Builder->Copy(); break;
+		case "swap"_h: m_CurrentFunction->Builder->Swap(); break;
+
+		case "add"_h: m_CurrentFunction->Builder->Add(); break;
+		case "sub"_h: m_CurrentFunction->Builder->Sub(); break;
+		case "mul"_h: m_CurrentFunction->Builder->Mul(); break;
+		case "imul"_h: m_CurrentFunction->Builder->IMul(); break;
+		case "div"_h: m_CurrentFunction->Builder->Div(); break;
+		case "idiv"_h: m_CurrentFunction->Builder->IDiv(); break;
+		case "mod"_h: m_CurrentFunction->Builder->Mod(); break;
+		case "imod"_h: m_CurrentFunction->Builder->IMod(); break;
+		case "neg"_h: m_CurrentFunction->Builder->Neg(); break;
+		case "inc"_h: m_CurrentFunction->Builder->Inc(); break;
+		case "dec"_h: m_CurrentFunction->Builder->Dec(); break;
+
+		case "and"_h: m_CurrentFunction->Builder->And(); break;
+		case "or"_h: m_CurrentFunction->Builder->Or(); break;
+		case "xor"_h: m_CurrentFunction->Builder->Xor(); break;
+		case "not"_h: m_CurrentFunction->Builder->Not(); break;
+		case "shl"_h: m_CurrentFunction->Builder->Shl(); break;
+		case "sal"_h: m_CurrentFunction->Builder->Sal(); break;
+		case "shr"_h: m_CurrentFunction->Builder->Shr(); break;
+		case "sar"_h: m_CurrentFunction->Builder->Sar(); break;
+
+		case "cmp"_h: m_CurrentFunction->Builder->Cmp(); break;
+		case "icmp"_h: m_CurrentFunction->Builder->ICmp(); break;
+		case "jmp"_h: return ParseJmpInstruction();
+		case "je"_h: return ParseJeInstruction();
+		case "jne"_h: return ParseJneInstruction();
+		case "ja"_h: return ParseJaInstruction();
+		case "jae"_h: return ParseJaeInstruction();
+		case "jb"_h: return ParseJbInstruction();
+		case "jbe"_h: return ParseJbeInstruction();
+		case "call"_h: return ParseCallInstruction();
+		case "ret"_h: m_CurrentFunction->Builder->Ret(); break;
+
+		case "toi"_h: m_CurrentFunction->Builder->ToI(); break;
+		case "tol"_h: m_CurrentFunction->Builder->ToL(); break;
+		case "tod"_h: m_CurrentFunction->Builder->ToD(); break;
+		case "top"_h: m_CurrentFunction->Builder->ToP(); break;
+
+		case "null"_h: m_CurrentFunction->Builder->Null(); break;
+		case "new"_h: return ParseNewInstruction();
+		case "delete"_h: m_CurrentFunction->Builder->Delete(); break;
+		case "gcnull"_h: m_CurrentFunction->Builder->GCNull(); break;
+		case "gcnew"_h: return ParseGCNewInstruction();
+		case "apush"_h: return ParseAPushInstruction();
+		case "anew"_h: return ParseANewInstruction();
+		case "agcnew"_h: return ParseAGCNewInstruction();
+		case "alea"_h: m_CurrentFunction->Builder->ALea(); break;
+		case "count"_h: m_CurrentFunction->Builder->Count(); break;
+
+		default:
+			ERROR << "Unknown mnemonic.\n";
+			return true;
+		}
+
+		return false;
+	}
+	bool Parser::ParsePushInstruction() {
+		const Token* valueToken = nullptr;
+		if (IsInteger(GetToken(m_Token).Type)) {
+			valueToken = &GetToken(m_Token++);
+			const std::uint64_t value = std::get<std::uint64_t>(valueToken->Data);
+			if (valueToken->Suffix == "i") {
+				if (value > std::numeric_limits<std::uint32_t>::max()) {
+					WARNING << "Overflowed integer literal.\n";
+				}
+				const auto inx = m_Result.ByteFile.AddIntConstant(static_cast<std::uint32_t>(value));
+				m_CurrentFunction->Builder->Push(inx);
+			} else if (valueToken->Suffix == "l") {
+				const auto inx = m_Result.ByteFile.AddLongConstant(value);
+				m_CurrentFunction->Builder->Push(inx);
+			} else {
+				if (value > std::numeric_limits<std::uint32_t>::max()) {
+					const auto inx = m_Result.ByteFile.AddIntConstant(static_cast<std::uint32_t>(value));
+					m_CurrentFunction->Builder->Push(inx);
+				} else {
+					const auto inx = m_Result.ByteFile.AddLongConstant(value);
+					m_CurrentFunction->Builder->Push(inx);
+				}
+			}
+		} else if (Accept(valueToken, TokenType::Decimal)) {
+			const double value = std::get<double>(valueToken->Data);
+			const auto inx = m_Result.ByteFile.AddDoubleConstant(value);
+			m_CurrentFunction->Builder->Push(inx);
+		} else if (Accept(valueToken, TokenType::Identifier)) {
+			const auto structure = m_Result.FindStructure(valueToken->Word);
+			if (structure == m_Result.Structures.end()) {
+				ERROR << "Nonexistent structure name '" << valueToken->Word << "'.\n";
+				return true;
+			}
+			m_CurrentFunction->Builder->Push(structure->Index);
+		} else {
+			ERROR << "Excepted literal or structure name.\n";
+			return true;
+		}
+		return false;
+	}
+	bool Parser::ParseLoadInstruction() {
+		const Token* nameToken = nullptr;
+		if (!Accept(nameToken, TokenType::Identifier)) {
+			ERROR << "Excepted parameter or local variable name.\n";
+			return true;
+		}
+
+		const auto var = GetLocalVaraible(nameToken->Word);
+		if (!var) {
+			ERROR << "Nonexistent local variable '" << nameToken->Word << "'.\n";
+			return true;
+		}
+
+		m_CurrentFunction->Builder->Load(*var);
+		return false;
+	}
+	bool Parser::ParseStoreInstruction() {
+		const Token* nameToken = nullptr;
+		if (!Accept(nameToken, TokenType::Identifier)) {
+			ERROR << "Excepted parameter or local variable name.\n";
+			return true;
+		}
+
+		auto var = GetLocalVaraible(nameToken->Word);
+		if (!var) {
+			var = m_CurrentFunction->Builder->AddLocalVariable();
+			m_CurrentFunction->LocalVariables.push_back(LocalVariable{ nameToken->Word, *var });
+		}
+
+		m_CurrentFunction->Builder->Store(*var);
+		return false;
+	}
+	bool Parser::ParseLeaInstruction() {
+		const Token* nameToken = nullptr;
+		if (!Accept(nameToken, TokenType::Identifier)) {
+			ERROR << "Excepted parameter or local variable name.\n";
+			return true;
+		}
+
+		const auto var = GetLocalVaraible(nameToken->Word);
+		if (!var) {
+			ERROR << "Nonexistent local variable '" << nameToken->Word << "'.\n";
+			return true;
+		}
+
+		m_CurrentFunction->Builder->Lea(*var);
+		return false;
+	}
+	bool Parser::ParseFLeaInstruction() {
+		const auto field = GetField();
+		if (!field) return true;
+
+		m_CurrentFunction->Builder->FLea(*field);
+		return false;
+	}
+	bool Parser::ParseJmpInstruction() {
+		return false;
+	}
+	bool Parser::ParseJeInstruction() {
+		return false;
+	}
+	bool Parser::ParseJneInstruction() {
+		return false;
+	}
+	bool Parser::ParseJaInstruction() {
+		return false;
+	}
+	bool Parser::ParseJaeInstruction() {
+		return false;
+	}
+	bool Parser::ParseJbInstruction() {
+		return false;
+	}
+	bool Parser::ParseJbeInstruction() {
+		return false;
+	}
+	bool Parser::ParseCallInstruction() {
+		return false;
+	}
+	bool Parser::ParseNewInstruction() {
+		return false;
+	}
+	bool Parser::ParseGCNewInstruction() {
+		return false;
+	}
+	bool Parser::ParseAPushInstruction() {
+		return false;
+	}
+	bool Parser::ParseANewInstruction() {
+		return false;
+	}
+	bool Parser::ParseAGCNewInstruction() {
+		return false;
+	}
+
+	std::optional<sgn::FieldIndex> Parser::GetField() {
+		const Token* structureNameToken = nullptr;
+		std::vector<Structure>::iterator structure;
+		if (!Accept(structureNameToken, TokenType::Identifier)) {
+			ERROR << "Excepted structure name.\n";
+			return std::nullopt;
+		} else if ((structure = m_Result.FindStructure(structureNameToken->Word)) == m_Result.Structures.end()) {
+			ERROR << "Nonexistent structure '" << structureNameToken->Word << "'.\n";
+			return std::nullopt;
+		}
+
+		const Token* dotToken = nullptr;
+		if (!Accept(dotToken, TokenType::Dot)) {
+			ERROR << "Excepted dot after structure name.\n";
+			return std::nullopt;
+		}
+
+		const Token* fieldNameToken = nullptr;
+		std::vector<Field>::iterator field;
+		if (!Accept(fieldNameToken, TokenType::Identifier)) {
+			ERROR << "Excepted field name.\n";
+			return std::nullopt;
+		} else if ((field = structure->FindField(fieldNameToken->Word)) == structure->Fields.end()) {
+			ERROR << "Nonexistent field '" << structureNameToken->Word << '.' << fieldNameToken->Word << "'.\n";
+			return std::nullopt;
+		}
+
+		return field->Index;
+	}
+	std::optional<sgn::LocalVariableIndex> Parser::GetLocalVaraible(const std::string& name) {
+		const auto iter = m_CurrentFunction->FindLocalVariable(name);
+		if (iter == m_CurrentFunction->LocalVariables.end()) return std::nullopt;
+		else return iter->Index;
 	}
 }
 
@@ -729,7 +993,7 @@ namespace sam {
 			} else {
 				const auto structure = m_Assembly.FindStructure(op);
 				if (structure == m_Assembly.Structures.end()) {
-					ERROR << "Nonexistent structure name '" << op << "'.\n";
+					ERROR << "Nonexistent structure '" << op << "'.\n";
 					return false;
 				}
 				function->Builder->Push(structure->Index);
