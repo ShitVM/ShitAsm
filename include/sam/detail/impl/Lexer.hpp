@@ -4,6 +4,8 @@
 namespace sam {
 	constexpr bool IsKeyword(TokenType type) noexcept {
 		switch (type) {
+		case TokenType::ImportKeyword:
+		case TokenType::AsKeyword:
 		case TokenType::StructKeyword:
 		case TokenType::FuncKeyword:
 		case TokenType::ProcKeyword:

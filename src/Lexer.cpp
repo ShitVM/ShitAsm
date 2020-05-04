@@ -18,7 +18,8 @@ namespace sam {
 	std::ostream& operator<<(std::ostream& stream, const Token& token) {
 		static constexpr std::string_view tokenTypes[] = {
 			"None", "NewLine",
-			"Identifier", "StructKeyword", "FuncKeyword", "ProcKeyword",
+			"Identifier",
+			"ImportKeyword", "AsKeyword", "StructKeyword", "FuncKeyword", "ProcKeyword",
 			"IntKeyword", "LongKeyword", "DoubleKeyword", "PointerKeyword", "GCPointerKeyword",
 			"BinInteger", "OctInteger", "DecInteger", "HexInteger", "Decimal",
 			"Plus", "Minus",
@@ -303,6 +304,8 @@ namespace sam {
 		m_Column += identifier.size();
 
 		static const std::unordered_map<std::string, TokenType> keywords = {
+			{ "import", TokenType::ImportKeyword },
+			{ "as", TokenType::AsKeyword },
 			{ "struct", TokenType::StructKeyword },
 			{ "func", TokenType::FuncKeyword },
 			{ "proc", TokenType::ProcKeyword },

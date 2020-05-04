@@ -29,6 +29,7 @@ namespace sam {
 		std::string m_Path;
 		std::vector<Token> m_Tokens;
 		std::ostringstream m_ErrorStream;
+		bool m_IsExternModule = false;
 
 		std::size_t m_Token = 0;
 		Token m_EmptyToken;
@@ -41,7 +42,7 @@ namespace sam {
 		bool m_HasInfo = false;
 
 	public:
-		Parser(std::string path, std::vector<Token> tokens) noexcept;
+		Parser(std::string path, std::vector<Token> tokens, bool isExternModule) noexcept;
 		Parser(const Parser&) = delete;
 		~Parser() = default;
 

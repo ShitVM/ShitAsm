@@ -30,7 +30,7 @@ int main(int argc, char* argv[]) {
 		if (lexer.HasError()) return EXIT_FAILURE;
 	}
 
-	sam::Parser parser(input.string(), lexer.GetTokens());
+	sam::Parser parser(input.string(), lexer.GetTokens(), false);
 	parser.Parse();
 	if (parser.HasMessage()) {
 		std::cout << parser.GetMessages();

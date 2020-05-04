@@ -15,6 +15,9 @@ namespace sam {
 		NewLine,
 
 		Identifier,
+
+		ImportKeyword,
+		AsKeyword,
 		StructKeyword,
 		FuncKeyword,
 		ProcKeyword,

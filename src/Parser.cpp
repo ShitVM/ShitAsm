@@ -14,8 +14,8 @@
 #include <utility>
 
 namespace sam {
-	Parser::Parser(std::string path, std::vector<Token> tokens) noexcept
-		: m_Path(std::move(path)), m_Tokens(std::move(tokens)) {}
+	Parser::Parser(std::string path, std::vector<Token> tokens, bool isExternModule) noexcept
+		: m_Path(std::move(path)), m_Tokens(std::move(tokens)), m_IsExternModule(isExternModule) {}
 
 #define CURRENT_TOKEN (&GetToken(m_Token))
 
@@ -31,7 +31,9 @@ namespace sam {
 		if (!SecondPass()) return;
 		ResetState();
 
-		ThirdPass();
+		if (!m_IsExternModule) {
+			ThirdPass();
+		}
 	}
 	Assembly Parser::GetAssembly() noexcept {
 		return std::move(m_Result);
@@ -94,7 +96,7 @@ namespace sam {
 			hasError |= NextLine((this->*function)());
 		}
 
-		if (isFirst) {
+		if (isFirst && !m_IsExternModule) {
 			if (!m_Result.HasFunction("entrypoint")) {
 				MESSAGEBASE << "Error: There is no 'entrypoint' procedure.\n";
 				hasError = true;
