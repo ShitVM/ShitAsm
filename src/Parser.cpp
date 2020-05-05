@@ -165,7 +165,7 @@ namespace sam {
 			hasError = true;
 		}
 
-		const sgn::StructureIndex index = m_Result.ByteFile.AddStructure();
+		const sgn::StructureIndex index = m_Result.ByteFile.AddStructure(nameToken->Word);
 		m_Result.Structures.push_back(Structure{ nameToken->Word, index });
 
 		m_CurrentStructure = &m_Result.Structures.back();
@@ -260,7 +260,7 @@ namespace sam {
 
 		sgn::FunctionIndex index = sgn::FunctionIndex::OperandIndex/*Dummy*/;
 		if (nameToken->Word != "entrypoint") {
-			index = m_Result.ByteFile.AddFunction(static_cast<std::uint16_t>(params.size()), hasResult);
+			index = m_Result.ByteFile.AddFunction(nameToken->Word, static_cast<std::uint16_t>(params.size()), hasResult);
 		} else if (hasResult) {
 			ERROR << "Invalid function name 'entrypoint'.\n";
 			INFO << "It can be used only for procedure.\n";
