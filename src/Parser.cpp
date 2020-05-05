@@ -136,10 +136,72 @@ namespace sam {
 
 	int Parser::ParsePrototypes() {
 		const Token* token = nullptr;
-		if (Accept(token, TokenType::StructKeyword)) return ParseStructure();
+		if (Accept(token, TokenType::ImportKeyword)) return ParseImport();
+		else if (Accept(token, TokenType::StructKeyword)) return ParseStructure();
 		else if (AcceptOr(token, TokenType::FuncKeyword, TokenType::ProcKeyword)) return ParseFunction(token->Type == TokenType::FuncKeyword);
 		else if (GetToken(m_Token + 1).Type == TokenType::Colon) return ParseLabel();
 		else return 2;
+	}
+	bool Parser::ParseImport() {
+		const Token* pathToken = nullptr;
+		if (!Accept(pathToken, TokenType::String)) {
+			if (AcceptOr(pathToken, TokenType::None, TokenType::NewLine)) {
+				ERROR << "Unexcepted end-of-line.\n";
+			} else if (Accept(pathToken, TokenType::AsKeyword)) {
+				ERROR << "Required module path.\n";
+			} else {
+				ERROR << "Excepted module path.\n";
+			}
+			return true;
+		}
+
+		const Token* asToken = nullptr;
+		if (!Accept(asToken, TokenType::AsKeyword)) {
+			ERROR << "Excepted 'as' after module path.\n";
+			return true;
+		}
+
+		bool hasError = false;
+		std::string namespaceName;
+
+		const Token* token = nullptr;
+		const Token* beforeToken = nullptr;
+		while (!AcceptOr(token, TokenType::None, TokenType::NewLine)) {
+			if (Accept(token, TokenType::Identifier)) {
+				if (beforeToken && beforeToken->Type == TokenType::Identifier) {
+					ERROR << "Excepted '.' after namespace name.\n";
+					hasError = true;
+				} else {
+					namespaceName.append(token->Word);
+				}
+			} else if (Accept(token, TokenType::Dot)) {
+				if (!beforeToken) {
+					ERROR << "Excepted namespace name after 'as'.\n";
+					hasError = true;
+				} else if (beforeToken->Type == TokenType::Dot) {
+					ERROR << "Excepted namespace name after '.'.\n";
+					hasError = true;
+				} else {
+					namespaceName.push_back('.');
+				}
+			} else {
+				if (!beforeToken) {
+					ERROR << "Excepted namespace name after 'as'.\n";
+				} else if (beforeToken->Type == TokenType::Identifier) {
+					ERROR << "Excepted end-of-line after namespace name.\n";
+				} else if (beforeToken->Type == TokenType::Dot) {
+					ERROR << "Excepted namespace name after '.'.\n";
+				}
+				hasError = true;
+			}
+
+			beforeToken = token;
+		}
+
+		// TODO
+
+		--m_Token;
+		return !hasError;
 	}
 	bool Parser::ParseStructure() {
 		const Token* nameToken = nullptr;
@@ -296,6 +358,15 @@ namespace sam {
 		return hasError;
 	}
 
+	bool Parser::IgnoreImport() {
+		const Token* token = nullptr;
+		while (!AcceptOr(token, TokenType::None, TokenType::NewLine)) {
+			++m_Token;
+		}
+
+		--m_Token;
+		return false;
+	}
 	bool Parser::IgnoreStructure() {
 		m_CurrentStructure = &m_Result.GetStructure(GetToken(m_Token).Word);
 		m_CurrentFunction = nullptr;
@@ -321,7 +392,8 @@ namespace sam {
 
 	int Parser::ParseFields() {
 		const Token* token = nullptr;
-		if (Accept(token, TokenType::StructKeyword)) return IgnoreStructure();
+		if (Accept(token, TokenType::ImportKeyword)) return IgnoreImport();
+		else if (Accept(token, TokenType::StructKeyword)) return IgnoreStructure();
 		else if (AcceptOr(token, TokenType::FuncKeyword, TokenType::ProcKeyword)) return IgnoreFunction();
 		else if (GetToken(m_Token + 1).Type == TokenType::Colon) return IgnoreLabel();
 		else if (m_CurrentStructure) return ParseField();
@@ -484,7 +556,8 @@ namespace sam {
 
 	int Parser::ParseInstructions() {
 		const Token* token = nullptr;
-		if (Accept(token, TokenType::StructKeyword)) return IgnoreStructure();
+		if (Accept(token, TokenType::ImportKeyword)) return IgnoreImport();
+		else if (Accept(token, TokenType::StructKeyword)) return IgnoreStructure();
 		else if (AcceptOr(token, TokenType::FuncKeyword, TokenType::ProcKeyword)) return IgnoreFunction();
 		else if (GetToken(m_Token + 1).Type == TokenType::Colon) {
 			m_CurrentFunction->Builder->AddLabel(GetToken(m_Token).Word);

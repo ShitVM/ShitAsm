@@ -71,10 +71,12 @@ namespace sam {
 		void GenerateBuilders();
 
 		int ParsePrototypes();
+		bool ParseImport();
 		bool ParseStructure();
 		bool ParseFunction(bool hasResult);
 		bool ParseLabel();
 
+		bool IgnoreImport();
 		bool IgnoreStructure();
 		bool IgnoreFunction();
 		bool IgnoreLabel();
