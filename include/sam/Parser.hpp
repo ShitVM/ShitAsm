@@ -24,6 +24,14 @@ namespace sam {
 }
 
 namespace sam {
+	struct Name final {
+		std::string NameSpace;
+		std::string Identifier;
+		std::string Full;
+	};
+}
+
+namespace sam {
 	class Parser final {
 	private:
 		std::string m_Path;
@@ -71,6 +79,7 @@ namespace sam {
 		void GenerateBuilders();
 
 		int ParsePrototypes();
+		std::optional<Name> ParseName(const std::string& required, int dot, bool isType);
 		bool ParseImport();
 		bool ParseStructure();
 		bool ParseFunction(bool hasResult);

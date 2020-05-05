@@ -144,6 +144,74 @@ namespace sam {
 		else if (GetToken(m_Token + 1).Type == TokenType::Colon) return ParseLabel();
 		else return 2;
 	}
+	std::optional<Name> Parser::ParseName(const std::string& required, int dot, bool isType) {
+		bool hasError = false;
+		std::string name;
+
+		const Token* token = nullptr;
+		const Token* beforeToken = nullptr;
+		while (true) {
+			if (AcceptOr(token, TokenType::None, TokenType::NewLine)) {
+				if (!beforeToken) {
+					ERROR << "Required " << required << ".\n";
+					return std::nullopt;
+				} else break;
+			} else if (Accept(token, TokenType::Identifier)) {
+				if (beforeToken && beforeToken->Type == TokenType::Identifier) {
+					ERROR << "Excepted '.' after namespace name.\n";
+					hasError = true;
+				} else if (beforeToken && isType && IsTypeKeyword(beforeToken->Type)) {
+					ERROR << "Unexcepted identifier after " << required << ".\n";
+					hasError = true;
+				} else {
+					name.append(token->Word);
+				}
+			} else if (Accept(token, TokenType::Dot)) {
+				if (!beforeToken) {
+					ERROR << "Excepted " << required << " before '.'.\n";
+					hasError = true;
+				} else if (isType && IsTypeKeyword(beforeToken->Type)) {
+					ERROR << "Excepted namespace name after '.'.\n";
+					hasError = true;
+				} else if (beforeToken->Type == TokenType::Dot) {
+					ERROR << "Excepted " << required << " after '.'.\n";
+					hasError = true;
+				} else {
+					name.push_back('.');
+				}
+			} else {
+				if (isType && IsTypeKeyword(GetToken(m_Token).Type)) {
+					++m_Token;
+					if (beforeToken && beforeToken->Type == TokenType::Identifier) {
+						ERROR << "Excepted '.' after namespace name.\n";
+						hasError = true;
+					} else if (beforeToken && isType && IsTypeKeyword(beforeToken->Type)) {
+						--m_Token;
+						break;
+					} else {
+						name.append(token->Word);
+					}
+				} else if (!beforeToken) {
+					ERROR << "Required " << required << ".\n";
+					return std::nullopt;
+				} else break;
+			}
+
+			beforeToken = token;
+		}
+
+		if (hasError) return std::nullopt;
+		else if (beforeToken->Type == TokenType::Dot) {
+			ERROR << "Excepted " << required << " after '.'.\n";
+			return std::nullopt;
+		}
+
+		std::size_t lastDot = name.find_last_of('.');
+		while (dot--) {
+			lastDot = name.find_last_of('.', lastDot - 1);
+		}
+		return Name{ name.substr(0, lastDot), name.substr(lastDot + 1), std::move(name) };
+	}
 	bool Parser::ParseImport() {
 		const Token* pathToken = nullptr;
 		if (!Accept(pathToken, TokenType::String)) {
@@ -164,42 +232,17 @@ namespace sam {
 		}
 
 		bool hasError = false;
-		std::string namespaceName;
-
-		const Token* token = nullptr;
-		const Token* beforeToken = nullptr;
-		while (!AcceptOr(token, TokenType::None, TokenType::NewLine)) {
-			if (Accept(token, TokenType::Identifier)) {
-				if (beforeToken && beforeToken->Type == TokenType::Identifier) {
-					ERROR << "Excepted '.' after namespace name.\n";
-					hasError = true;
-				} else {
-					namespaceName.append(token->Word);
-				}
-			} else if (Accept(token, TokenType::Dot)) {
-				if (!beforeToken) {
-					ERROR << "Excepted namespace name after 'as'.\n";
-					hasError = true;
-				} else if (beforeToken->Type == TokenType::Dot) {
-					ERROR << "Excepted namespace name after '.'.\n";
-					hasError = true;
-				} else {
-					namespaceName.push_back('.');
-				}
-			} else {
-				if (!beforeToken) {
-					ERROR << "Excepted namespace name after 'as'.\n";
-				} else if (beforeToken->Type == TokenType::Identifier) {
-					ERROR << "Excepted end-of-line after namespace name.\n";
-				} else if (beforeToken->Type == TokenType::Dot) {
-					ERROR << "Excepted namespace name after '.'.\n";
-				}
-				hasError = true;
-			}
-
-			beforeToken = token;
-		}
+		const auto namespaceName = ParseName("namespace name", 0, false);
+		if (!namespaceName) return true;
 		--m_Token;
+
+		const auto iter = std::find_if(m_Result.Dependencies.begin(), m_Result.Dependencies.end(), [&namespaceName](const auto& module) {
+			return namespaceName->Full == module.NameSpace;
+		});
+		if (iter != m_Result.Dependencies.end()) {
+			ERROR << "Duplicated namespace name '" << namespaceName->Full << "'.\n";
+			return true;
+		}
 
 		const std::string path = std::get<std::string>(pathToken->Data);
 		const std::string absPath = svm::detail::GetAbsolutePath(path);
@@ -234,7 +277,7 @@ namespace sam {
 
 			module.Assembly = parser.GetAssembly();
 			module.Index = m_Result.ByteFile.AddExternModule(svm::detail::fs::relative(path).string());
-			module.NameSpace = std::move(namespaceName);
+			module.NameSpace = std::move(namespaceName->Full);
 		}
 
 	parsed:
