@@ -246,7 +246,12 @@ namespace sam {
 
 		const std::string path = std::get<std::string>(pathToken->Data);
 		const std::string absPath = svm::detail::GetAbsolutePath(path);
-		if (!m_IsExternModule && !m_Result.HasDependency(absPath)) {
+		if (!m_IsExternModule) {
+			if (m_Result.HasDependency(absPath)) {
+				ERROR << "Already imported module '" << path << "'.\n";
+				return true;
+			}
+
 			std::ifstream inputStream(path);
 			if (!inputStream) {
 				ERROR << "Failed to open '" << path << "'.\n";
