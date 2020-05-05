@@ -4,9 +4,11 @@
 #include <sam/String.hpp>
 #include <sgn/ByteFile.hpp>
 #include <svm/Type.hpp>
+#include <svm/detail/FileSystem.hpp>
 
 #include <algorithm>
 #include <cctype>
+#include <fstream>
 #include <iterator>
 #include <limits>
 #include <memory>
@@ -197,11 +199,46 @@ namespace sam {
 
 			beforeToken = token;
 		}
-
-		// TODO
-
 		--m_Token;
-		return !hasError;
+
+		const std::string path = std::get<std::string>(pathToken->Data);
+		const std::string absPath = svm::detail::GetAbsolutePath(path);
+		if (!m_IsExternModule && !m_Result.HasDependency(absPath)) {
+			std::ifstream inputStream(path);
+			if (!inputStream) {
+				ERROR << "Failed to open '" << path << "'.\n";
+				return true;
+			}
+
+			ExternModule& module = m_Result.Dependencies.emplace_back(ExternModule{ absPath });
+
+			Lexer lexer(path, inputStream);
+			lexer.Lex();
+			if (lexer.HasMessage()) {
+				m_ErrorStream << lexer.GetMessages();
+				if (lexer.HasError()) {
+					m_HasError = hasError = true;
+					goto parsed;
+				}
+			}
+
+			Parser parser(path, lexer.GetTokens(), true);
+			parser.Parse();
+			if (parser.HasMessage()) {
+				m_ErrorStream << parser.GetMessages();
+				if (parser.HasError()) {
+					m_HasError = hasError = true;
+					goto parsed;
+				}
+			}
+
+			module.Assembly = parser.GetAssembly();
+			module.Index = m_Result.ByteFile.AddExternModule(svm::detail::fs::relative(path).string());
+			module.NameSpace = std::move(namespaceName);
+		}
+
+	parsed:
+		return hasError;
 	}
 	bool Parser::ParseStructure() {
 		const Token* nameToken = nullptr;
