@@ -4,6 +4,7 @@
 #include <sgn/Operand.hpp>
 
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -29,6 +30,9 @@ namespace sam {
 		sgn::FunctionIndex Index;
 		std::vector<Label> Labels;
 		std::vector<LocalVariable> LocalVariables;
+
+		std::optional<sgn::ExternFunctionIndex> ExternIndex;
+		std::optional<sgn::MappedFunctionIndex> MappedIndex;
 
 		std::vector<Label>::iterator FindLabel(const std::string& name);
 		Label& GetLabel(const std::string& name);

@@ -205,12 +205,30 @@ namespace sam {
 			ERROR << "Excepted " << required << " after '.'.\n";
 			return std::nullopt;
 		}
+		
+		if (dot == 0) {
+			return Name{ name, "", name };
+		} else if (dot == 1) {
+			const std::size_t lastDot = name.find_last_of('.');
+			if (lastDot == std::string::npos) {
+				return Name{ "", name, name };
+			} else {
+				return Name{ name.substr(0, lastDot), name.substr(lastDot + 1), name };
+			}
+		} else if (dot == 2) {
+			const std::size_t lastDot = name.find_last_of('.');
+			if (lastDot == std::string::npos) {
+				ERROR << "Excepted '.' after identifier.\n";
+				return std::nullopt;
+			}
 
-		std::size_t lastDot = name.find_last_of('.');
-		while (dot--) {
-			lastDot = name.find_last_of('.', lastDot - 1);
+			const std::size_t prevLastDot = name.find_last_of('.', lastDot - 1);
+			if (prevLastDot == std::string::npos) {
+				return Name{ "", name, name };
+			} else {
+				return Name{ name.substr(0, prevLastDot), name.substr(prevLastDot + 1), name };
+			}
 		}
-		return Name{ name.substr(0, lastDot), name.substr(lastDot + 1), std::move(name) };
 	}
 	bool Parser::ParseImport() {
 		const Token* pathToken = nullptr;
@@ -232,7 +250,7 @@ namespace sam {
 		}
 
 		bool hasError = false;
-		const auto namespaceName = ParseName("namespace name", 0, false);
+		auto namespaceName = ParseName("namespace name", 0, false);
 		if (!namespaceName) return true;
 		--m_Token;
 
@@ -281,8 +299,29 @@ namespace sam {
 			}
 
 			module.Assembly = parser.GetAssembly();
-			module.Index = m_Result.ByteFile.AddExternModule(svm::detail::fs::relative(path).string());
+			module.Index = m_Result.ByteFile.AddExternModule(svm::detail::fs::relative(path).replace_extension("sbf").string());
 			module.NameSpace = std::move(namespaceName->Full);
+
+			const auto moduleInfo = m_Result.ByteFile.GetExternModuleInfo(module.Index);
+
+			for (auto& structure : module.Assembly.Structures) {
+				const auto structureInfo = module.Assembly.ByteFile.GetStructureInfo(structure.Index);
+
+				std::vector<sgn::Field> fields;
+				for (auto& field : structureInfo->Fields) {
+					fields.push_back({ field.Type, field.Count });
+				}
+
+				structure.ExternIndex = moduleInfo->AddStructure(structureInfo->Name, fields);
+			}
+
+			for (auto& function : module.Assembly.Functions) {
+				if (function.Name == "entrypoint") continue;
+
+				const auto functionInfo = module.Assembly.ByteFile.GetFunctionInfo(function.Index);
+
+				function.ExternIndex = moduleInfo->AddFunction(functionInfo->Name, functionInfo->Arity, functionInfo->HasResult);
+			}
 		}
 
 	parsed:
@@ -820,7 +859,11 @@ namespace sam {
 		return false;
 	}
 	bool Parser::ParseFLeaInstruction() {
-		const auto field = GetField();
+		const auto fieldName = ParseName("field name", 2, false);
+		if (!fieldName) return true;
+		--m_Token;
+
+		const auto field = GetField(*fieldName);
 		if (!field) return true;
 
 		m_CurrentFunction->Builder->FLea(*field);
@@ -918,16 +961,17 @@ namespace sam {
 		return false;
 	}
 	bool Parser::ParseCallInstruction() {
-		const Token* nameToken = nullptr;
-		if (!Accept(nameToken, TokenType::Identifier)) {
-			ERROR << "Excepted function or procedure name.\n";
-			return true;
+		const auto functionName = ParseName("function or procedure name", 1, false);
+		if (!functionName) return true;
+		--m_Token;
+
+		const auto function = GetFunction(*functionName);
+		if (std::holds_alternative<std::monostate>(function)) return true;
+		else if (std::holds_alternative<sgn::FunctionIndex>(function)) {
+			m_CurrentFunction->Builder->Call(std::get<sgn::FunctionIndex>(function));
+		} else if (std::holds_alternative<sgn::MappedFunctionIndex>(function)) {
+			m_CurrentFunction->Builder->Call(std::get<sgn::MappedFunctionIndex>(function));
 		}
-
-		const auto function = GetFunction(nameToken->Word);
-		if (!function) return true;
-
-		m_CurrentFunction->Builder->Call(*function);
 		return false;
 	}
 	bool Parser::ParseNewInstruction() {
@@ -1015,44 +1059,71 @@ namespace sam {
 		return false;
 	}
 
-	std::optional<sgn::FieldIndex> Parser::GetField() {
-		const Token* structureNameToken = nullptr;
-		std::vector<Structure>::iterator structure;
-		if (!Accept(structureNameToken, TokenType::Identifier)) {
-			ERROR << "Excepted structure name.\n";
-			return std::nullopt;
-		} else if ((structure = m_Result.FindStructure(structureNameToken->Word)) == m_Result.Structures.end()) {
-			ERROR << "Nonexistent structure '" << structureNameToken->Word << "'.\n";
+	std::optional<sgn::FieldIndex> Parser::GetField(const Name& name) {
+		auto assembly = &m_Result;
+		ExternModule* externModule = nullptr;
+
+		if (!name.NameSpace.empty()) {
+			const auto dependency = m_Result.FindDependencyByNameSpace(name.NameSpace);
+			if (dependency == m_Result.Dependencies.end()) {
+				ERROR << "Nonexistent namespace '" << name.NameSpace << "'.\n";
+				return std::nullopt;
+			}
+
+			externModule = &*dependency;
+			assembly = &dependency->Assembly;
+		}
+
+		const auto dot = name.Identifier.find('.');
+
+		const auto structureName = name.Identifier.substr(0, dot);
+		const auto structure = assembly->FindStructure(structureName);
+		if (structure == assembly->Structures.end()) {
+			ERROR << "Nonexistent structure '" << structureName << "'.\n";
 			return std::nullopt;
 		}
 
-		const Token* dotToken = nullptr;
-		if (!Accept(dotToken, TokenType::Dot)) {
-			ERROR << "Excepted dot after structure name.\n";
-			return std::nullopt;
-		}
-
-		const Token* fieldNameToken = nullptr;
-		std::vector<Field>::iterator field;
-		if (!Accept(fieldNameToken, TokenType::Identifier)) {
-			ERROR << "Excepted field name.\n";
-			return std::nullopt;
-		} else if ((field = structure->FindField(fieldNameToken->Word)) == structure->Fields.end()) {
-			ERROR << "Nonexistent field '" << structureNameToken->Word << '.' << fieldNameToken->Word << "'.\n";
+		const auto fieldName = name.Identifier.substr(dot + 1);
+		const auto field = structure->FindField(fieldName);
+		if (field == structure->Fields.end()) {
+			ERROR << "Nonexistent field '" << name.Identifier << "'.\n";
 			return std::nullopt;
 		}
 
 		return field->Index;
 	}
-	std::optional<sgn::FunctionIndex> Parser::GetFunction(const std::string& name) {
-		const auto iter = m_Result.FindFunction(name);
-		if (iter == m_Result.Functions.end()) {
-			ERROR << "Nonexistent function or procedure '" << name << "'.\n";
-			return std::nullopt;
-		} else if (name == "entrypoint") {
+	std::variant<std::monostate, sgn::FunctionIndex, sgn::MappedFunctionIndex> sam::Parser::GetFunction(const Name& name) {
+		auto assembly = &m_Result;
+		ExternModule* externModule = nullptr;
+
+		if (!name.NameSpace.empty()) {
+			const auto dependency = m_Result.FindDependencyByNameSpace(name.NameSpace);
+			if (dependency == m_Result.Dependencies.end()) {
+				ERROR << "Nonexistent namespace '" << name.NameSpace << "'.\n";
+				return std::monostate{};
+			}
+
+			externModule = &*dependency;
+			assembly = &dependency->Assembly;
+		}
+
+		const auto function = assembly->FindFunction(name.Identifier);
+		if (function == assembly->Functions.end()) {
+			ERROR << "Nonexistent function or procedure '" << name.Identifier << "'.\n";
+			return std::monostate{};
+		} else if (name.Identifier == "entrypoint") {
 			ERROR << "Noncallable procedure 'entrypoint'.\n";
-			return std::nullopt;
-		} else return iter->Index;
+			return std::monostate{};
+		}
+
+		if (externModule) {
+			if (!function->MappedIndex) {
+				function->MappedIndex = m_Result.ByteFile.Map(externModule->Index, *function->ExternIndex);
+			}
+			return *function->MappedIndex;
+		} else {
+			return function->Index;
+		}
 	}
 	std::optional<sgn::LabelIndex> Parser::GetLabel(const std::string& name) {
 		const auto iter = m_CurrentFunction->FindLabel(name);

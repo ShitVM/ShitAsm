@@ -119,8 +119,8 @@ namespace sam {
 		bool ParseANewInstruction();
 		bool ParseAGCNewInstruction();
 
-		std::optional<sgn::FieldIndex> GetField();
-		std::optional<sgn::FunctionIndex> GetFunction(const std::string& name);
+		std::optional<sgn::FieldIndex> GetField(const Name& name);
+		std::variant<std::monostate, sgn::FunctionIndex, sgn::MappedFunctionIndex> GetFunction(const Name& name);
 		std::optional<sgn::LabelIndex> GetLabel(const std::string& name);
 		std::optional<sgn::LocalVariableIndex> GetLocalVaraible(const std::string& name);
 	};
