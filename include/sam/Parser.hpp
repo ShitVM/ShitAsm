@@ -37,7 +37,7 @@ namespace sam {
 		std::string m_Path;
 		std::vector<Token> m_Tokens;
 		std::ostringstream m_ErrorStream;
-		bool m_IsExternModule = false;
+		int m_Depth = 0;
 
 		std::size_t m_Token = 0;
 		Token m_EmptyToken;
@@ -50,7 +50,7 @@ namespace sam {
 		bool m_HasInfo = false;
 
 	public:
-		Parser(std::string path, std::vector<Token> tokens, bool isExternModule) noexcept;
+		Parser(std::string path, std::vector<Token> tokens, int depth) noexcept;
 		Parser(const Parser&) = delete;
 		~Parser() = default;
 
@@ -76,26 +76,30 @@ namespace sam {
 		bool FirstPass();
 		bool SecondPass();
 		bool ThirdPass();
+		bool FourthPass();
 		void GenerateBuilders();
-
-		int ParsePrototypes();
-		std::optional<Name> ParseName(const std::string& required, int dot, bool isType);
-		bool ParseImport();
-		bool ParseStructure();
-		bool ParseFunction(bool hasResult);
-		bool ParseLabel();
 
 		bool IgnoreImport();
 		bool IgnoreStructure();
 		bool IgnoreFunction();
 		bool IgnoreLabel();
 
+		int ParsePrototypes();
+		bool ParseStructure();
+		bool ParseFunction(bool hasResult);
+		bool ParseLabel();
+
+		int ParseDependencies();
+		std::optional<Name> ParseName(const std::string& required, int dot, bool isType, bool isField = false);
+		bool ParseExternModule(const Name& namespaceName, const std::string& path);
+		bool ParseImport();
+
 		int ParseFields();
 		std::variant<std::monostate, std::int32_t, std::uint32_t, std::int64_t, std::uint64_t, double> ParseNumber();
 		std::variant<std::monostate, std::int32_t, std::uint32_t, std::int64_t, std::uint64_t, double> MakeNegative(std::variant<std::uint32_t, std::uint64_t, double> literal, bool isNegative);
 		bool IsNegative(std::variant<std::monostate, std::int32_t, std::uint32_t, std::int64_t, std::uint64_t, double> value);
-		sgn::Type GetType(const std::string& name);
-		std::optional<Type> ParseType();
+		sgn::Type GetType(const Name& name);
+		std::optional<Type> ParseType(bool isField = false);
 		bool ParseField();
 
 		int ParseInstructions();

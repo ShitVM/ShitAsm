@@ -16,8 +16,8 @@
 #include <utility>
 
 namespace sam {
-	Parser::Parser(std::string path, std::vector<Token> tokens, bool isExternModule) noexcept
-		: m_Path(std::move(path)), m_Tokens(std::move(tokens)), m_IsExternModule(isExternModule) {}
+	Parser::Parser(std::string path, std::vector<Token> tokens, int depth) noexcept
+		: m_Path(std::move(path)), m_Tokens(std::move(tokens)), m_Depth(depth) {}
 
 #define CURRENT_TOKEN (&GetToken(m_Token))
 
@@ -27,15 +27,16 @@ namespace sam {
 #define ERROR (m_HasError = true, MESSAGEBASE) << "Error: Line " << CURRENT_TOKEN->Line << ", "
 
 	void Parser::Parse() {
-		if (!FirstPass()) return;
+		if (!FirstPass() || m_Depth > 1) return; // Prototypes
 		ResetState();
 
-		if (!SecondPass()) return;
+		if (!SecondPass()) return; // Dependencies
 		ResetState();
 
-		if (!m_IsExternModule) {
-			ThirdPass();
-		}
+		if (!ThirdPass() || m_Depth > 0) return; // Strucutre fields
+		ResetState();
+
+		FourthPass(); // Function instructions
 	}
 	Assembly Parser::GetAssembly() noexcept {
 		return std::move(m_Result);
@@ -98,7 +99,7 @@ namespace sam {
 			hasError |= NextLine((this->*function)());
 		}
 
-		if (isFirst && !m_IsExternModule) {
+		if (isFirst && m_Depth == 0) {
 			if (!m_Result.HasFunction("entrypoint")) {
 				MESSAGEBASE << "Error: There is no 'entrypoint' procedure.\n";
 				hasError = true;
@@ -112,9 +113,12 @@ namespace sam {
 		return Pass(&Parser::ParsePrototypes, true);
 	}
 	bool Parser::SecondPass() {
-		return Pass(&Parser::ParseFields, false);
+		return Pass(&Parser::ParseDependencies, false);
 	}
 	bool Parser::ThirdPass() {
+		return Pass(&Parser::ParseFields, false);
+	}
+	bool Parser::FourthPass() {
 		return Pass(&Parser::ParseInstructions, false);
 	}
 	void Parser::GenerateBuilders() {
@@ -136,196 +140,45 @@ namespace sam {
 		}
 	}
 
+	bool Parser::IgnoreImport() {
+		const Token* token = nullptr;
+		while (!AcceptOr(token, TokenType::None, TokenType::NewLine)) {
+			++m_Token;
+		}
+
+		--m_Token;
+		return false;
+	}
+	bool Parser::IgnoreStructure() {
+		m_CurrentStructure = &m_Result.GetStructure(GetToken(m_Token).Word);
+		m_CurrentFunction = nullptr;
+
+		m_Token += 2;
+		return false;
+	}
+	bool Parser::IgnoreFunction() {
+		m_CurrentStructure = nullptr;
+		m_CurrentFunction = &m_Result.GetFunction(GetToken(m_Token).Word);
+
+		const Token* token = nullptr;
+		while (!Accept(token, TokenType::Colon)) {
+			++m_Token;
+		}
+
+		return false;
+	}
+	bool Parser::IgnoreLabel() {
+		m_Token += 2;
+		return false;
+	}
+
 	int Parser::ParsePrototypes() {
 		const Token* token = nullptr;
-		if (Accept(token, TokenType::ImportKeyword)) return ParseImport();
+		if (Accept(token, TokenType::ImportKeyword)) return IgnoreImport();
 		else if (Accept(token, TokenType::StructKeyword)) return ParseStructure();
 		else if (AcceptOr(token, TokenType::FuncKeyword, TokenType::ProcKeyword)) return ParseFunction(token->Type == TokenType::FuncKeyword);
 		else if (GetToken(m_Token + 1).Type == TokenType::Colon) return ParseLabel();
 		else return 2;
-	}
-	std::optional<Name> Parser::ParseName(const std::string& required, int dot, bool isType) {
-		bool hasError = false;
-		std::string name;
-
-		const Token* token = nullptr;
-		const Token* beforeToken = nullptr;
-		while (true) {
-			if (AcceptOr(token, TokenType::None, TokenType::NewLine)) {
-				if (!beforeToken) {
-					ERROR << "Required " << required << ".\n";
-					return std::nullopt;
-				} else break;
-			} else if (Accept(token, TokenType::Identifier)) {
-				if (beforeToken && beforeToken->Type == TokenType::Identifier) {
-					ERROR << "Excepted '.' after namespace name.\n";
-					hasError = true;
-				} else if (beforeToken && isType && IsTypeKeyword(beforeToken->Type)) {
-					ERROR << "Unexcepted identifier after " << required << ".\n";
-					hasError = true;
-				} else {
-					name.append(token->Word);
-				}
-			} else if (Accept(token, TokenType::Dot)) {
-				if (!beforeToken) {
-					ERROR << "Excepted " << required << " before '.'.\n";
-					hasError = true;
-				} else if (isType && IsTypeKeyword(beforeToken->Type)) {
-					ERROR << "Excepted namespace name after '.'.\n";
-					hasError = true;
-				} else if (beforeToken->Type == TokenType::Dot) {
-					ERROR << "Excepted " << required << " after '.'.\n";
-					hasError = true;
-				} else {
-					name.push_back('.');
-				}
-			} else {
-				if (isType && IsTypeKeyword(GetToken(m_Token).Type)) {
-					++m_Token;
-					if (beforeToken && beforeToken->Type == TokenType::Identifier) {
-						ERROR << "Excepted '.' after namespace name.\n";
-						hasError = true;
-					} else if (beforeToken && isType && IsTypeKeyword(beforeToken->Type)) {
-						--m_Token;
-						break;
-					} else {
-						name.append(token->Word);
-					}
-				} else if (!beforeToken) {
-					ERROR << "Required " << required << ".\n";
-					return std::nullopt;
-				} else break;
-			}
-
-			beforeToken = token;
-		}
-
-		if (hasError) return std::nullopt;
-		else if (beforeToken->Type == TokenType::Dot) {
-			ERROR << "Excepted " << required << " after '.'.\n";
-			return std::nullopt;
-		}
-		
-		if (dot == 0) {
-			return Name{ name, "", name };
-		} else if (dot == 1) {
-			const std::size_t lastDot = name.find_last_of('.');
-			if (lastDot == std::string::npos) {
-				return Name{ "", name, name };
-			} else {
-				return Name{ name.substr(0, lastDot), name.substr(lastDot + 1), name };
-			}
-		} else if (dot == 2) {
-			const std::size_t lastDot = name.find_last_of('.');
-			if (lastDot == std::string::npos) {
-				ERROR << "Excepted '.' after identifier.\n";
-				return std::nullopt;
-			}
-
-			const std::size_t prevLastDot = name.find_last_of('.', lastDot - 1);
-			if (prevLastDot == std::string::npos) {
-				return Name{ "", name, name };
-			} else {
-				return Name{ name.substr(0, prevLastDot), name.substr(prevLastDot + 1), name };
-			}
-		}
-	}
-	bool Parser::ParseImport() {
-		const Token* pathToken = nullptr;
-		if (!Accept(pathToken, TokenType::String)) {
-			if (AcceptOr(pathToken, TokenType::None, TokenType::NewLine)) {
-				ERROR << "Unexcepted end-of-line.\n";
-			} else if (Accept(pathToken, TokenType::AsKeyword)) {
-				ERROR << "Required module path.\n";
-			} else {
-				ERROR << "Excepted module path.\n";
-			}
-			return true;
-		}
-
-		const Token* asToken = nullptr;
-		if (!Accept(asToken, TokenType::AsKeyword)) {
-			ERROR << "Excepted 'as' after module path.\n";
-			return true;
-		}
-
-		bool hasError = false;
-		auto namespaceName = ParseName("namespace name", 0, false);
-		if (!namespaceName) return true;
-		--m_Token;
-
-		const auto iter = std::find_if(m_Result.Dependencies.begin(), m_Result.Dependencies.end(), [&namespaceName](const auto& module) {
-			return namespaceName->Full == module.NameSpace;
-		});
-		if (iter != m_Result.Dependencies.end()) {
-			ERROR << "Duplicated namespace name '" << namespaceName->Full << "'.\n";
-			return true;
-		}
-
-		const std::string path = std::get<std::string>(pathToken->Data);
-		const std::string absPath = svm::detail::GetAbsolutePath(path);
-		if (!m_IsExternModule) {
-			if (m_Result.HasDependency(absPath)) {
-				ERROR << "Already imported module '" << path << "'.\n";
-				return true;
-			}
-
-			std::ifstream inputStream(path);
-			if (!inputStream) {
-				ERROR << "Failed to open '" << path << "'.\n";
-				return true;
-			}
-
-			ExternModule& module = m_Result.Dependencies.emplace_back(ExternModule{ absPath });
-
-			Lexer lexer(path, inputStream);
-			lexer.Lex();
-			if (lexer.HasMessage()) {
-				m_ErrorStream << lexer.GetMessages();
-				if (lexer.HasError()) {
-					m_HasError = hasError = true;
-					goto parsed;
-				}
-			}
-
-			Parser parser(path, lexer.GetTokens(), true);
-			parser.Parse();
-			if (parser.HasMessage()) {
-				m_ErrorStream << parser.GetMessages();
-				if (parser.HasError()) {
-					m_HasError = hasError = true;
-					goto parsed;
-				}
-			}
-
-			module.Assembly = parser.GetAssembly();
-			module.Index = m_Result.ByteFile.AddExternModule(svm::detail::fs::relative(path).replace_extension("sbf").string());
-			module.NameSpace = std::move(namespaceName->Full);
-
-			const auto moduleInfo = m_Result.ByteFile.GetExternModuleInfo(module.Index);
-
-			for (auto& structure : module.Assembly.Structures) {
-				const auto structureInfo = module.Assembly.ByteFile.GetStructureInfo(structure.Index);
-
-				std::vector<sgn::Field> fields;
-				for (auto& field : structureInfo->Fields) {
-					fields.push_back({ field.Type, field.Count });
-				}
-
-				structure.ExternIndex = moduleInfo->AddStructure(structureInfo->Name, fields);
-			}
-
-			for (auto& function : module.Assembly.Functions) {
-				if (function.Name == "entrypoint") continue;
-
-				const auto functionInfo = module.Assembly.ByteFile.GetFunctionInfo(function.Index);
-
-				function.ExternIndex = moduleInfo->AddFunction(functionInfo->Name, functionInfo->Arity, functionInfo->HasResult);
-			}
-		}
-
-	parsed:
-		return hasError;
 	}
 	bool Parser::ParseStructure() {
 		const Token* nameToken = nullptr;
@@ -482,36 +335,205 @@ namespace sam {
 		return hasError;
 	}
 
-	bool Parser::IgnoreImport() {
+	int Parser::ParseDependencies() {
 		const Token* token = nullptr;
-		while (!AcceptOr(token, TokenType::None, TokenType::NewLine)) {
-			++m_Token;
+		if (Accept(token, TokenType::ImportKeyword)) return ParseImport();
+		else if (Accept(token, TokenType::StructKeyword)) return IgnoreStructure();
+		else if (AcceptOr(token, TokenType::FuncKeyword, TokenType::ProcKeyword)) return IgnoreFunction();
+		else if (GetToken(m_Token + 1).Type == TokenType::Colon) return IgnoreLabel();
+		else return 2;
+	}
+	std::optional<Name> Parser::ParseName(const std::string& required, int dot, bool isType, bool isField) {
+		bool hasError = false;
+		std::string name;
+
+		const Token* token = nullptr;
+		const Token* beforeToken = nullptr;
+		while (true) {
+			if (AcceptOr(token, TokenType::None, TokenType::NewLine)) {
+				if (!beforeToken) {
+					ERROR << "Required " << required << ".\n";
+					return std::nullopt;
+				} else break;
+			} else if (Accept(token, TokenType::Identifier)) {
+				if (beforeToken && beforeToken->Type == TokenType::Identifier) {
+					if (isField) {
+						break;
+					} else {
+						ERROR << "Excepted '.' after namespace name.\n";
+						hasError = true;
+					}
+				} else if (beforeToken && isType && IsTypeKeyword(beforeToken->Type)) {
+					if (isField) {
+						break;
+					} else {
+						ERROR << "Unexcepted identifier after " << required << ".\n";
+						hasError = true;
+					}
+				} else {
+					name.append(token->Word);
+				}
+			} else if (Accept(token, TokenType::Dot)) {
+				if (!beforeToken) {
+					ERROR << "Excepted " << required << " before '.'.\n";
+					hasError = true;
+				} else if (isType && IsTypeKeyword(beforeToken->Type)) {
+					ERROR << "Excepted namespace name after '.'.\n";
+					hasError = true;
+				} else if (beforeToken->Type == TokenType::Dot) {
+					ERROR << "Excepted " << required << " after '.'.\n";
+					hasError = true;
+				} else {
+					name.push_back('.');
+				}
+			} else {
+				if (isType && IsTypeKeyword(GetToken(m_Token).Type)) {
+					token = &GetToken(m_Token++);
+
+					if (beforeToken && beforeToken->Type == TokenType::Identifier) {
+						ERROR << "Excepted '.' after namespace name.\n";
+						hasError = true;
+					} else if (beforeToken && isType && IsTypeKeyword(beforeToken->Type)) {
+						--m_Token;
+						break;
+					} else {
+						name.append(token->Word);
+					}
+				} else if (!beforeToken) {
+					ERROR << "Required " << required << ".\n";
+					return std::nullopt;
+				} else break;
+			}
+
+			beforeToken = token;
 		}
 
+		if (hasError) return std::nullopt;
+		else if (beforeToken->Type == TokenType::Dot) {
+			ERROR << "Excepted " << required << " after '.'.\n";
+			return std::nullopt;
+		}
+
+		if (dot == 0) {
+			return Name{ name, "", name };
+		} else if (dot == 1) {
+			const std::size_t lastDot = name.find_last_of('.');
+			if (lastDot == std::string::npos) {
+				return Name{ "", name, name };
+			} else {
+				return Name{ name.substr(0, lastDot), name.substr(lastDot + 1), name };
+			}
+		} else if (dot == 2) {
+			const std::size_t lastDot = name.find_last_of('.');
+			if (lastDot == std::string::npos) {
+				ERROR << "Excepted '.' after identifier.\n";
+				return std::nullopt;
+			}
+
+			const std::size_t prevLastDot = name.find_last_of('.', lastDot - 1);
+			if (prevLastDot == std::string::npos) {
+				return Name{ "", name, name };
+			} else {
+				return Name{ name.substr(0, prevLastDot), name.substr(prevLastDot + 1), name };
+			}
+		}
+	}
+	bool Parser::ParseExternModule(const Name& namespaceName, const std::string& path) {
+		if (m_Result.HasDependency(path)) {
+			ERROR << "Already imported module '" << path << "'.\n";
+			return true;
+		}
+
+		std::ifstream inputStream(svm::detail::fs::u8path(path));
+		if (!inputStream) {
+			ERROR << "Failed to open '" << path << "'.\n";
+			return true;
+		}
+
+		ExternModule& module = m_Result.Dependencies.emplace_back(ExternModule{ path });
+
+		Lexer lexer(path, inputStream);
+		lexer.Lex();
+		if (lexer.HasMessage()) {
+			m_ErrorStream << lexer.GetMessages();
+			if (lexer.HasError()) {
+				m_HasError = true;
+				return true;
+			}
+		}
+
+		Parser parser(path, lexer.GetTokens(), m_Depth + 1);
+		parser.Parse();
+		if (parser.HasMessage()) {
+			m_ErrorStream << parser.GetMessages();
+			if (parser.HasError()) {
+				m_HasError = true;
+				return true;
+			}
+		}
+
+		if (m_Depth <= 1) {
+			module.Assembly = parser.GetAssembly();
+			module.Index = m_Result.ByteFile.AddExternModule(
+				svm::detail::fs::relative(svm::detail::fs::u8path(path)).replace_extension("sbf").string());
+			module.NameSpace = std::move(namespaceName.Full);
+
+			const auto moduleInfo = m_Result.ByteFile.GetExternModuleInfo(module.Index);
+
+			for (auto& structure : module.Assembly.Structures) {
+				const auto structureInfo = module.Assembly.ByteFile.GetStructureInfo(structure.Index);
+
+				std::vector<sgn::Field> fields;
+				for (auto& field : structureInfo->Fields) {
+					fields.push_back({ field.Type, field.Count });
+				}
+
+				structure.ExternIndex = moduleInfo->AddStructure(structureInfo->Name, fields);
+			}
+
+			for (auto& function : module.Assembly.Functions) {
+				if (function.Name == "entrypoint") continue;
+
+				const auto functionInfo = module.Assembly.ByteFile.GetFunctionInfo(function.Index);
+
+				function.ExternIndex = moduleInfo->AddFunction(functionInfo->Name, functionInfo->Arity, functionInfo->HasResult);
+			}
+		}
+	}
+	bool Parser::ParseImport() {
+		const Token* pathToken = nullptr;
+		if (!Accept(pathToken, TokenType::String)) {
+			if (AcceptOr(pathToken, TokenType::None, TokenType::NewLine)) {
+				ERROR << "Unexcepted end-of-line.\n";
+			} else if (Accept(pathToken, TokenType::AsKeyword)) {
+				ERROR << "Required module path.\n";
+			} else {
+				ERROR << "Excepted module path.\n";
+			}
+			return true;
+		}
+
+		const Token* asToken = nullptr;
+		if (!Accept(asToken, TokenType::AsKeyword)) {
+			ERROR << "Excepted 'as' after module path.\n";
+			return true;
+		}
+
+		auto namespaceName = ParseName("namespace name", 0, false);
+		if (!namespaceName) return true;
 		--m_Token;
-		return false;
-	}
-	bool Parser::IgnoreStructure() {
-		m_CurrentStructure = &m_Result.GetStructure(GetToken(m_Token).Word);
-		m_CurrentFunction = nullptr;
 
-		m_Token += 2;
-		return false;
-	}
-	bool Parser::IgnoreFunction() {
-		m_CurrentStructure = nullptr;
-		m_CurrentFunction = &m_Result.GetFunction(GetToken(m_Token).Word);
-
-		const Token* token = nullptr;
-		while (!Accept(token, TokenType::Colon)) {
-			++m_Token;
+		const auto iter = std::find_if(m_Result.Dependencies.begin(), m_Result.Dependencies.end(), [&namespaceName](const auto& module) {
+			return namespaceName->Full == module.NameSpace;
+		});
+		if (iter != m_Result.Dependencies.end()) {
+			ERROR << "Duplicated namespace name '" << namespaceName->Full << "'.\n";
+			return true;
 		}
 
-		return false;
-	}
-	bool Parser::IgnoreLabel() {
-		m_Token += 2;
-		return false;
+		const std::string path = std::get<std::string>(pathToken->Data);
+		const std::string absPath = svm::detail::GetAbsolutePath(path);
+		return ParseExternModule(*namespaceName, absPath);
 	}
 
 	int Parser::ParseFields() {
@@ -566,7 +588,7 @@ namespace sam {
 		if (std::holds_alternative<double>(value)) return std::get<double>(value) < 0;
 		else return std::holds_alternative<std::int32_t>(value) || std::holds_alternative<std::int64_t>(value);
 	}
-	sgn::Type Parser::GetType(const std::string& name) {
+	sgn::Type Parser::GetType(const Name& name) {
 		static const std::unordered_map<std::string, sgn::Type> fundamental = {
 			{ "int", sgn::IntType },
 			{ "long", sgn::LongType },
@@ -575,40 +597,57 @@ namespace sam {
 			{ "gcpointer", sgn::GCPointerType },
 		};
 
-		const auto iter = fundamental.find(name);
-		if (iter != fundamental.end()) return svm::GetType(sgn::Structures(), iter->second->Code);
+		auto assembly = &m_Result;
+		ExternModule* externModule = nullptr;
 
-		const auto structIter = m_Result.FindStructure(name);
-		if (structIter != m_Result.Structures.end()) return m_Result.ByteFile.GetStructureInfo(structIter->Index)->Type;
-		else return nullptr;
-	}
-	std::optional<Type> Parser::ParseType() {
-		const Token* nameToken = nullptr;
-		if (!Accept(nameToken, TokenType::Identifier)) {
-			if (AcceptOr(nameToken, TokenType::None, TokenType::NewLine)) {
-				ERROR << "Unexcepted end-of-line.\n";
-			} else if (Accept(nameToken, TokenType::LeftBracket)) {
-				ERROR << "Required type name.\n";
-			} else if (IsTypeKeyword(GetToken(m_Token).Type)) {
-				nameToken = &GetToken(m_Token++);
-				goto parseType;
-			} else {
-				ERROR << "Invalid function or procedure name.\n";
+		if (!name.NameSpace.empty()) {
+			const auto dependency = m_Result.FindDependencyByNameSpace(name.NameSpace);
+			if (dependency == m_Result.Dependencies.end()) {
+				ERROR << "Nonexistent namespace '" << name.NameSpace << "'.\n";
+				return nullptr;
 			}
-			return std::nullopt;
+
+			externModule = &*dependency;
+			assembly = &dependency->Assembly;
 		}
 
-	parseType:
-		const sgn::Type type = GetType(nameToken->Word);
+		const auto iter = fundamental.find(name.Identifier);
+		if (iter != fundamental.end()) {
+			if (externModule) {
+				WARNING << "Use just '" << name.Identifier << "' instead of '" << name.Full << "'.\n";
+			}
+			return svm::GetFundamentalType(iter->second->Code);
+		}
+
+		const auto structure = assembly->FindStructure(name.Identifier);
+		if (structure == assembly->Structures.end()) {
+			ERROR << "Nonexistent structure '" << name.Identifier << "'.\n";
+			return nullptr;
+		} else if (structure->ExternIndex && !structure->MappedIndex) {
+			structure->MappedIndex = m_Result.ByteFile.Map(externModule->Index, *structure->ExternIndex);
+		}
+
+		if (externModule) {
+			return m_Result.ByteFile.GetStructureInfo(*structure->MappedIndex)->Type;
+		} else {
+			return m_Result.ByteFile.GetStructureInfo(structure->Index)->Type;
+		}
+	}
+	std::optional<Type> Parser::ParseType(bool isField) {
+		const auto typeName = ParseName("type name", 1, true, isField);
+		if (!typeName) return std::nullopt;
+		--m_Token;
+	
+		const auto type = GetType(*typeName);
 
 		const Token* maybeLeftBracketToken = nullptr;
-		if (!Accept(maybeLeftBracketToken, TokenType::LeftBracket)) return Type{ type, nameToken->Word };
+		if (!Accept(maybeLeftBracketToken, TokenType::LeftBracket)) return Type{ type, typeName->Full };
 
 		bool hasError = false;
 		std::uint64_t length = 0;
 
 		const Token* lengthOrRightBracketToken = nullptr;
-		if (Accept(lengthOrRightBracketToken, TokenType::RightBracket)) return Type{ type, nameToken->Word, 0 };
+		if (Accept(lengthOrRightBracketToken, TokenType::RightBracket)) return Type{ type, typeName->Full, 0 };
 		else if (Accept(lengthOrRightBracketToken, TokenType::Decimal)) {
 			ERROR << "Array's length must be integer.\n";
 			hasError = true;
@@ -640,12 +679,12 @@ namespace sam {
 		if (!Accept(rightBracketToken, TokenType::RightBracket)) {
 			ERROR << "Excepted ']' after array's length.\n";
 			return std::nullopt;
-		} else return Type{ type, nameToken->Word, length };
+		} else return Type{ type, typeName->Full, length };
 	}
 	bool Parser::ParseField() {
 		bool hasError = false;
 
-		const auto type = ParseType();
+		const auto type = ParseType(true);
 		if (!type) return true;
 		else if (type->ElementType == nullptr) {
 			ERROR << "Nonexistent type '" << type->ElementTypeName << "'.\n";
@@ -1061,7 +1100,6 @@ namespace sam {
 
 	std::optional<sgn::FieldIndex> Parser::GetField(const Name& name) {
 		auto assembly = &m_Result;
-		ExternModule* externModule = nullptr;
 
 		if (!name.NameSpace.empty()) {
 			const auto dependency = m_Result.FindDependencyByNameSpace(name.NameSpace);
@@ -1070,7 +1108,6 @@ namespace sam {
 				return std::nullopt;
 			}
 
-			externModule = &*dependency;
 			assembly = &dependency->Assembly;
 		}
 
