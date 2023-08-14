@@ -98,7 +98,7 @@ namespace sam {
 		std::variant<std::monostate, std::int32_t, std::uint32_t, std::int64_t, std::uint64_t, double> ParseNumber();
 		std::variant<std::monostate, std::int32_t, std::uint32_t, std::int64_t, std::uint64_t, double> MakeNegative(std::variant<std::uint32_t, std::uint64_t, double> literal, bool isNegative);
 		bool IsNegative(std::variant<std::monostate, std::int32_t, std::uint32_t, std::int64_t, std::uint64_t, double> value);
-		sgn::Type GetType(const Name& name);
+		sgn::Type GetType(const Name& name, const Structure** outStructure = nullptr);
 		std::optional<Type> ParseType(bool isField = false);
 		bool ParseField();
 

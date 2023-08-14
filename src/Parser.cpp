@@ -602,7 +602,7 @@ namespace sam {
 		if (std::holds_alternative<double>(value)) return std::get<double>(value) < 0;
 		else return std::holds_alternative<std::int32_t>(value) || std::holds_alternative<std::int64_t>(value);
 	}
-	sgn::Type Parser::GetType(const Name& name) {
+	sgn::Type Parser::GetType(const Name& name, const Structure** outStructure) {
 		static const std::unordered_map<std::string, sgn::Type> fundamental = {
 			{ "int", sgn::IntType },
 			{ "long", sgn::LongType },
@@ -639,6 +639,10 @@ namespace sam {
 			return nullptr;
 		} else if (structure->ExternIndex && !structure->MappedIndex) {
 			structure->MappedIndex = m_Result.ByteFile.Map(externModule->Index, *structure->ExternIndex);
+		}
+
+		if (outStructure) {
+			*outStructure = &*structure;
 		}
 
 		if (externModule) {
@@ -832,7 +836,6 @@ namespace sam {
 	}
 	bool Parser::ParsePushInstruction() {
 		const auto number = ParseNumber();
-		const Token* structureToken = nullptr;
 		if (!std::holds_alternative<std::monostate>(number)) {
 			if (std::holds_alternative<std::int32_t>(number)) {
 				const auto inx = m_Result.ByteFile.AddIntConstant(static_cast<std::uint32_t>(std::get<std::int32_t>(number)));
@@ -850,18 +853,25 @@ namespace sam {
 				const auto inx = m_Result.ByteFile.AddDoubleConstant(std::get<double>(number));
 				m_CurrentFunction->Builder->Push(inx);
 			}
-		} else if (Accept(structureToken, TokenType::Identifier)) {
-			const auto structure = m_Result.FindStructure(structureToken->Word);
-			if (structure == m_Result.Structures.end()) {
-				ERROR << "Nonexistent structure name '" << structureToken->Word << "'.\n";
-				return true;
+			return false;
+		}
+
+		const auto name = ParseName("structure name", 1, true);
+		if (!name) return true;
+		--m_Token;
+
+		const Structure* structure = nullptr;
+		const sgn::Type type = GetType(*name, &structure);
+		if (structure) {
+			if (structure->MappedIndex) {
+				m_CurrentFunction->Builder->Push(*structure->MappedIndex);
+			} else {
+				m_CurrentFunction->Builder->Push(structure->Index);
 			}
-			m_CurrentFunction->Builder->Push(structure->Index);
 		} else {
 			ERROR << "Excepted literal or structure name.\n";
 			return true;
 		}
-		return false;
 	}
 	bool Parser::ParseLoadInstruction() {
 		const Token* nameToken = nullptr;
