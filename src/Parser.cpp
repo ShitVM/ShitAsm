@@ -4,10 +4,10 @@
 #include <sam/String.hpp>
 #include <sgn/ByteFile.hpp>
 #include <svm/Type.hpp>
-#include <svm/detail/FileSystem.hpp>
 
 #include <algorithm>
 #include <cctype>
+#include <filesystem>
 #include <fstream>
 #include <iterator>
 #include <limits>
@@ -444,7 +444,7 @@ namespace sam {
 			return true;
 		}
 
-		std::ifstream inputStream(svm::detail::fs::u8path(path));
+		std::ifstream inputStream(path);
 		if (!inputStream) {
 			ERROR << "Failed to open '" << path << "'.\n";
 			return true;
@@ -475,7 +475,7 @@ namespace sam {
 		if (m_Depth <= 1) {
 			module.Assembly = parser.GetAssembly();
 			module.Index = m_Result.ByteFile.AddExternModule(
-				svm::detail::fs::relative(svm::detail::fs::u8path(path)).replace_extension("sbf").string());
+				std::filesystem::relative(path).replace_extension("sbf").string()); // TODO
 			module.NameSpace = std::move(namespaceName.Full);
 
 			const auto moduleInfo = m_Result.ByteFile.GetExternModuleInfo(module.Index);
@@ -532,7 +532,7 @@ namespace sam {
 		}
 
 		const std::string path = std::get<std::string>(pathToken->Data);
-		const std::string absPath = svm::detail::GetAbsolutePath(path);
+		const std::string absPath = std::filesystem::weakly_canonical(path).generic_string();
 		return ParseExternModule(*namespaceName, absPath);
 	}
 

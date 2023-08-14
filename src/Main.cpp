@@ -3,9 +3,9 @@
 #include <sam/Lexer.hpp>
 #include <sam/Parser.hpp>
 #include <sgn/Generator.hpp>
-#include <svm/detail/FileSystem.hpp>
 
 #include <cstdlib>
+#include <filesystem>
 #include <fstream>
 #include <iostream>
 
@@ -15,7 +15,7 @@ int main(int argc, char* argv[]) {
 		return EXIT_FAILURE;
 	}
 
-	const svm::detail::fs::path input(argv[1]);
+	const std::filesystem::path input(argv[1]);
 	const std::string output = argc >= 3 ? argv[2] : input.stem().string() + ".sbf";
 	std::ifstream inputStream(input);
 	if (!inputStream) {
