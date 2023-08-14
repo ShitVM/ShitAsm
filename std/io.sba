@@ -1,0 +1,13 @@
+struct Stream:
+    long _handle
+
+func getStdin:
+func getStdout:
+
+func readChar32(stream):
+proc writeChar32(stream, value):
+
+func readInt(stream):
+proc writeInt(stream, value):
+
+proc entrypoint:

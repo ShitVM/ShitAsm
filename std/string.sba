@@ -1,0 +1,13 @@
+struct String32:
+    pointer data
+    long length
+    long capacity
+
+func createString:
+
+proc push(stringPtr, char):
+proc concat(dest, src):
+
+proc destroy(stringPtr):
+
+proc entrypoint:
