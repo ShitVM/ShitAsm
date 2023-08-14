@@ -69,10 +69,10 @@ bar:
 모든 명령어는 기본적으로 니모닉을 갖습니다. 니모닉은 해당 명령어가 어떤 동작을 수행해야 하는지 나타냅니다. 니모닉에 따라 피연산자가 필요한 경우도 있습니다. 이럴 때는 니모닉과 띄어쓰기 등으로 구분을 한 뒤 적습니다.
 
 ```
-push 1024			; Error!
+push 1024           ; Error!
 
 proc entrypoint:
-	push 1024		; OK
+	push 1024       ; OK
 	...
 ```
 또, 모든 명령어는 반드시 어떤 프로시저나 함수에 소속되어 있어야 합니다. 프로시저나 함수에 소속되어 있지 않은 명령어가 있다면 ShitBC 어셈블러는 오류를 발생시키고, ShitVM 바이트 파일을 생성하지 않습니다.
@@ -384,29 +384,29 @@ func foo:
 	ret
 
 proc entrypoint:
-	call foo		; 현재 모듈의 foo 함수가 호출됩니다.
-	call foo.foo	; foo.sba 모듈의 foo 함수가 호출됩니다.
+	call foo        ; 현재 모듈의 foo 함수가 호출됩니다.
+	call foo.foo    ; foo.sba 모듈의 foo 함수가 호출됩니다.
 ```
-전역 네임스페이스에 소속되지 않은 요소에 접근하기 위해서는 위와 같이 `네임스페이스.요소 이름`의 꼴로 접근해야 합니다.
+전역 네임스페이스에 소속되지 않은 요소에 접근하기 위해서는 위와 같이 `네임스페이스.요소이름`의 꼴로 접근해야 합니다.
 
 ```
 import "foo.sba" as foo
-import "foo.sba" as bar		; Error!
-import "bar.sba" as foo 	; Error!
+import "foo.sba" as bar     ; Error!
+import "bar.sba" as foo     ; Error!
 ```
 같은 모듈은 여러 번 참조될 수 없으며, 하나의 네임스페이스 안에 여러 모듈의 요소가 소속될 수 없습니다.
 
 ```
 import "foo.sba" as foo
-import "bar.sba" as foo.bar		; OK
-import "baz.sba" as .foo.bar	; Error!
-import "baz.sba" as foo.bar.	; Error!
-import "baz.sba" as foo..bar	; Error!
-import "baz.sba" as foo.bar.2	; Error!
-import "baz.sba" as foo.bar.int	; Error!
+import "bar.sba" as foo.bar     ; OK
+import "baz.sba" as .foo.bar    ; Error!
+import "baz.sba" as foo.bar.    ; Error!
+import "baz.sba" as foo..bar    ; Error!
+import "baz.sba" as foo.bar.2   ; Error!
+import "baz.sba" as foo.bar.int ; Error!
 ```
 네임스페이스 이름은 여러 개의 식별자로 구성될 수도 있습니다. 단, 이때 식별자 사이는 점(`.`)으로 연결되어 있어야 합니다.
 
 `foo.bar` 네임스페이스의 경우, `foo` 네임스페이스 하위에 `bar`라는 네임스페이스가 있는 것처럼 보일 수 있습니다. 하지만 ShitBC 어셈블리의 네임스페이스에는 계층 구조가 존재하지 않으므로, `foo.bar` 라는 이름을 가진 독립적인 네임스페이스로 존재하는 것임에 유의해야 합니다.
 
-현재 모듈과 참조한 다른 모듈은 ShitVM에 의해 런타임때 동적으로 연결됩니다. 즉, `foo.sba`와 `bar.sba`가 각각 `foo.sbf`, `bar.sbf`로 어셈블됐고, `foo.sba`에서 `bar.sba`를 참조한 경우, `foo.sbf`를 배포할 때 `bar.sbf`도 함께 배포해야 합니다. 또, 현재 ShitAsm에서는 `foo.sba`를 어셈블한다고 해서 `bar.sba`가 어셈블되는 것은 아니므로, 각각 어셈블해야 할 필요가 있습니다.
+현재 모듈과 참조한 다른 모듈은 ShitVM에 의해 런타임때 동적으로 연결됩니다. 즉, 예를 들어 `foo.sba`와 `bar.sba`가 각각 `foo.sbf`, `bar.sbf`로 어셈블됐고, `foo.sba`에서 `bar.sba`를 참조한 경우, `foo.sbf`를 배포할 때 `bar.sbf`도 함께 배포해야 합니다. 또, 현재 ShitAsm는 `foo.sba`를 어셈블한다고 해서 `bar.sba`가 어셈블되는 것은 아니므로, 각각 어셈블해야 할 필요가 있습니다.
