@@ -439,18 +439,29 @@ namespace sam {
 		}
 	}
 	bool Parser::ParseExternModule(const Name& namespaceName, const std::string& path) {
-		if (m_Result.HasDependency(path)) {
+		const auto resolvedPath = std::filesystem::weakly_canonical(path).generic_string();
+		auto realPath = resolvedPath;
+		if (m_Result.HasDependency(resolvedPath)) {
 			ERROR << "Already imported module '" << path << "'.\n";
 			return true;
+		} else if (path.find("std/") == 0) {
+			WARNING << "Use '/" << path << "' to import the standard library.\n";
+		} else if (resolvedPath[0] == '/') {
+			if (resolvedPath.find("std/")) {
+				realPath.erase(realPath.begin()); // TODO: 라이브러리 디렉터리에서 탐색하도록 변경
+			} else {
+				ERROR << "Failed to open '" << path << "'.\n";
+				return true;
+			}
 		}
 
-		std::ifstream inputStream(path);
+		std::ifstream inputStream(realPath);
 		if (!inputStream) {
 			ERROR << "Failed to open '" << path << "'.\n";
 			return true;
 		}
 
-		ExternModule& module = m_Result.Dependencies.emplace_back(ExternModule{ path });
+		ExternModule& module = m_Result.Dependencies.emplace_back(ExternModule{ resolvedPath });
 
 		Lexer lexer(path, inputStream);
 		lexer.Lex();
@@ -474,9 +485,14 @@ namespace sam {
 
 		if (m_Depth <= 1) {
 			module.Assembly = parser.GetAssembly();
-			module.Index = m_Result.ByteFile.AddExternModule(
-				std::filesystem::relative(path).replace_extension("sbf").string()); // TODO
 			module.NameSpace = std::move(namespaceName.Full);
+			if (resolvedPath[0] == '/') {
+				module.Index = m_Result.ByteFile.AddExternModule(
+					std::filesystem::path(resolvedPath).replace_extension("sbf").generic_string());
+			} else {
+				module.Index = m_Result.ByteFile.AddExternModule(
+					std::filesystem::relative(resolvedPath).replace_extension("sbf").generic_string());
+			}
 
 			const auto moduleInfo = m_Result.ByteFile.GetExternModuleInfo(module.Index);
 
@@ -531,9 +547,7 @@ namespace sam {
 			return true;
 		}
 
-		const std::string path = std::get<std::string>(pathToken->Data);
-		const std::string absPath = std::filesystem::weakly_canonical(path).generic_string();
-		return ParseExternModule(*namespaceName, absPath);
+		return ParseExternModule(*namespaceName, std::get<std::string>(pathToken->Data));
 	}
 
 	int Parser::ParseFields() {

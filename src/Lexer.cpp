@@ -61,9 +61,6 @@ namespace sam {
 	void Lexer::Lex() {
 		while (std::getline(m_InputStream, m_Line) && ++m_LineNum) {
 			if (IgnoreComment()) continue;
-			else if (m_LineNum > 1) {
-				m_Result.emplace_back("\n", TokenType::NewLine, m_LineNum - 1);
-			}
 
 			for (m_Column = 0; m_Column < m_Line.size();) {
 				const char firstByte = m_Line[m_Column];
@@ -77,6 +74,8 @@ namespace sam {
 					LexIdentifier();
 				}
 			}
+
+			m_Result.emplace_back("\n", TokenType::NewLine, m_LineNum);
 		}
 	}
 	std::vector<Token> Lexer::GetTokens() noexcept {
