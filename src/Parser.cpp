@@ -354,10 +354,14 @@ namespace sam {
 				if (!beforeToken) {
 					ERROR << "Required " << required << ".\n";
 					return std::nullopt;
-				} else break;
+				} else {
+					--m_Token;
+					break;
+				}
 			} else if (Accept(token, TokenType::Identifier)) {
 				if (beforeToken && beforeToken->Type == TokenType::Identifier) {
 					if (isField) {
+						--m_Token;
 						break;
 					} else {
 						ERROR << "Excepted '.' after namespace name.\n";
@@ -365,6 +369,7 @@ namespace sam {
 					}
 				} else if (beforeToken && isType && IsTypeKeyword(beforeToken->Type)) {
 					if (isField) {
+						--m_Token;
 						break;
 					} else {
 						ERROR << "Unexcepted identifier after " << required << ".\n";
@@ -393,7 +398,7 @@ namespace sam {
 					if (beforeToken && beforeToken->Type == TokenType::Identifier) {
 						ERROR << "Excepted '.' after namespace name.\n";
 						hasError = true;
-					} else if (beforeToken && isType && IsTypeKeyword(beforeToken->Type)) {
+					} else if (beforeToken && IsTypeKeyword(beforeToken->Type)) {
 						--m_Token;
 						break;
 					} else {
@@ -402,7 +407,9 @@ namespace sam {
 				} else if (!beforeToken) {
 					ERROR << "Required " << required << ".\n";
 					return std::nullopt;
-				} else break;
+				} else {
+					break;
+				}
 			}
 
 			beforeToken = token;
@@ -539,7 +546,6 @@ namespace sam {
 
 		auto namespaceName = ParseName("namespace name", 0, false);
 		if (!namespaceName) return true;
-		--m_Token;
 
 		const auto iter = std::find_if(m_Result.Dependencies.begin(), m_Result.Dependencies.end(), [&namespaceName](const auto& module) {
 			return namespaceName->Full == module.NameSpace;
@@ -656,7 +662,6 @@ namespace sam {
 	std::optional<Type> Parser::ParseType(bool isField) {
 		const auto typeName = ParseName("type name", 1, true, isField);
 		if (!typeName) return std::nullopt;
-		--m_Token;
 	
 		const auto type = GetType(*typeName);
 
@@ -860,7 +865,6 @@ namespace sam {
 
 		const auto name = ParseName("structure name", 1, true);
 		if (!name) return true;
-		--m_Token;
 
 		const Structure* structure = nullptr;
 		const sgn::Type type = GetType(*name, &structure);
@@ -926,7 +930,6 @@ namespace sam {
 	bool Parser::ParseFLeaInstruction() {
 		const auto fieldName = ParseName("field name", 2, false);
 		if (!fieldName) return true;
-		--m_Token;
 
 		const auto field = GetField(*fieldName);
 		if (!field) return true;
@@ -1028,7 +1031,6 @@ namespace sam {
 	bool Parser::ParseCallInstruction() {
 		const auto functionName = ParseName("function or procedure name", 1, false);
 		if (!functionName) return true;
-		--m_Token;
 
 		const auto function = GetFunction(*functionName);
 		if (std::holds_alternative<std::monostate>(function)) return true;
