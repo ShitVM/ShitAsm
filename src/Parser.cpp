@@ -439,8 +439,8 @@ namespace sam {
 		}
 	}
 	bool Parser::ParseExternModule(const Name& namespaceName, const std::string& path) {
-		const auto resolvedPath = std::filesystem::weakly_canonical(path).generic_string();
-		auto realPath = resolvedPath;
+		const std::string resolvedPath = std::filesystem::weakly_canonical(path).generic_string();
+		std::string realPath = resolvedPath;
 		if (m_Result.HasDependency(resolvedPath)) {
 			ERROR << "Already imported module '" << path << "'.\n";
 			return true;
@@ -485,7 +485,7 @@ namespace sam {
 
 		if (m_Depth <= 1) {
 			module.Assembly = parser.GetAssembly();
-			module.NameSpace = std::move(namespaceName.Full);
+			module.NameSpace = namespaceName.Full;
 			if (resolvedPath[0] == '/') {
 				module.Index = m_Result.ByteFile.AddExternModule(
 					std::filesystem::path(resolvedPath).replace_extension("sbf").generic_string());
@@ -515,6 +515,8 @@ namespace sam {
 				function.ExternIndex = moduleInfo->AddFunction(functionInfo->Name, functionInfo->Arity, functionInfo->HasResult);
 			}
 		}
+
+		return false;
 	}
 	bool Parser::ParseImport() {
 		const Token* pathToken = nullptr;
