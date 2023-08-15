@@ -874,6 +874,7 @@ namespace sam {
 			} else {
 				m_CurrentFunction->Builder->Push(structure->Index);
 			}
+			return false;
 		} else {
 			ERROR << "Excepted literal or structure name.\n";
 			return true;
