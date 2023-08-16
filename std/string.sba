@@ -6,7 +6,7 @@ struct String32:
 func create32:
 
 proc push(strPtr, char):
-proc concat(dest, src):
+proc concat(destPtr, srcPtr):
 
 proc destroy(strPtr):
 
