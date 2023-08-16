@@ -22,6 +22,12 @@
 	- [`writeChar32` 프로시저](#writechar32-프로시저)
 	- [`readString32` 함수](#readstring32-함수)
 	- [`wrtieString32` 프로시저](#writestring32-프로시저)
+- [`string` 모듈](#string-모듈)
+	- [`String32` 구조체](#string32-구조체)
+	- [`create2` 함수](#create32-함수)
+	- [`push` 프로시저](#push-프로시저)
+	- [`concat` 프로시저](#concat-프로시저)
+	- [`destroy` 프로시저](#destroy-프로시저)
 
 ## 참조 방법
 표준 라이브러리는 여러 개의 모듈로 구성되어 있습니다.
