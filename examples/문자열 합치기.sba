@@ -2,7 +2,7 @@ import "/std/io.sba" as io
 import "/std/string.sba" as str
 
 func readString32(stream):
-    call str.createString
+    call str.create32
     store string
 
     load stream

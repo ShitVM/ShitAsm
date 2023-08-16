@@ -4,10 +4,27 @@ struct Stream:
 func getStdin:
 func getStdout:
 
-func readChar32(stream):
-proc writeChar32(stream, value):
+func openReadonlyFile(pathPtr):
+func openWriteonlyFile(pathPtr):
+proc closeFile(stream):
 
 func readInt(stream):
 proc writeInt(stream, value):
+func readSignedInt(stream):
+proc writeSignedInt(stream, value):
+
+func readLong(stream):
+proc writeLong(stream, value):
+func readSignedLong(stream):
+proc writeSignedLong(stream, value):
+
+func readDouble(stream):
+proc writeDouble(stream, value):
+
+func readChar32(stream):
+proc writeChar32(stream, value):
+
+func readString32(stream):
+proc writeString32(stream, valuePtr):
 
 proc entrypoint:

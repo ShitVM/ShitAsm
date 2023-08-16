@@ -3,11 +3,11 @@ struct String32:
     long length
     long capacity
 
-func createString:
+func create32:
 
-proc push(stringPtr, char):
+proc push(strPtr, char):
 proc concat(dest, src):
 
-proc destroy(stringPtr):
+proc destroy(strPtr):
 
 proc entrypoint:
