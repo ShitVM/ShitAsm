@@ -1,7 +1,7 @@
 struct String32:
-    pointer data
-    long length
-    long capacity
+	pointer data
+	long length
+	long capacity
 
 func create32:
 

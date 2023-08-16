@@ -1,5 +1,5 @@
 struct Stream:
-    long _handle
+	long _handle
 
 func getStdin:
 func getStdout:

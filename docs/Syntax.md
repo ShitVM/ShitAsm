@@ -412,6 +412,8 @@ import "baz.sba" as foo.bar.int ; Error!
 
 현재 모듈과 참조한 다른 모듈은 ShitVM에 의해 런타임때 동적으로 연결됩니다. 즉, 예를 들어 `foo.sba`와 `bar.sba`가 각각 `foo.sbf`, `bar.sbf`로 어셈블됐고, `foo.sba`에서 `bar.sba`를 참조한 경우, `foo.sbf`를 배포할 때 `bar.sbf`도 함께 배포해야 합니다. 또, 현재 ShitAsm는 `foo.sba`를 어셈블한다고 해서 `bar.sba`가 어셈블되는 것은 아니므로, 각각 어셈블해야 할 필요가 있습니다.
 
+ShitVM에서는 IO, 문자열 등 개발에 도움이 되는 요소들을 제공하고 있습니다. 이를 ShitVM 표준 라이브러리라고 합니다. [이곳](Standard%20Library.md)에서 표준 라이브러리에 대한 정보를 확인할 수 있습니다.
+
 ## 예제
 - 구조체를 활용한 [퍼셉트론 학습](../examples/퍼셉트론.sba)
 - 배열을 활용한 [피보나치 수열 계산](../examples/피보나치(배열).sba)
