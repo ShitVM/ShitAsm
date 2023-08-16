@@ -21,7 +21,7 @@
 	- [`readChar32` 함수](#readchar32-함수)
 	- [`writeChar32` 프로시저](#writechar32-프로시저)
 	- [`readString32` 함수](#readstring32-함수)
-	- [`wrtieString32` 프로시저](#writestring32-프로시저)
+	- [`writeString32` 프로시저](#writestring32-프로시저)
 - [`string` 모듈](#string-모듈)
 	- [`String32` 구조체](#string32-구조체)
 	- [`create2` 함수](#create32-함수)
@@ -93,7 +93,7 @@ call copy ; destArray = int[5]{ 0, 1, 2, 5, 6 }이 됩니다.
 ```
 
 ## `io` 모듈
-이 모듈은 입출력과 관련된 함수를 제공합니다.
+이 모듈은 입출력과 관련된 구조체와 함수를 제공합니다.
 
 ### `Stream` 구조체
 #### 원형
@@ -281,6 +281,8 @@ proc writeString32(stream, valuePtr)
 `valuePtr`은 반드시 `pointer` 자료형이어야 합니다. `valuePtr`이 가리키는 곳의 자료형은 반드시 `string.String32` 구조체여야 합니다.
 
 ## `string` 모듈
+이 모듈은 문자열과 관련된 구조체와 함수를 제공합니다.
+
 ### `String32` 구조체
 #### 원형
 ```
@@ -350,9 +352,9 @@ proc concat(destPtr, srcPtr)
 ```
 
 #### 설명
-이 함수는 문자열 맨 뒤에 다른 문자열을 연결할 때 사용합니다. 목적지 문자열에 대한 포인터(`dest`)와 출발지 문자열에 대한 포인터(`srcPtr`)를 받습니다.
+이 함수는 문자열 맨 뒤에 다른 문자열을 연결할 때 사용합니다. 목적지 문자열에 대한 포인터(`destPtr`)와 출발지 문자열에 대한 포인터(`srcPtr`)를 받습니다.
 
-`dest`, `src`는 반드시 `pointer` 자료형이어야 합니다. `dest`, `src`가 가리키는 곳의 자료형은 반드시 `String32` 구조체여야 합니다.
+`destPtr`, `srcPtr`은 반드시 `pointer` 자료형이어야 합니다. `destPtr`, `srcPtr`가 가리키는 곳의 자료형은 반드시 `String32` 구조체여야 합니다.
 
 #### 예제
 ```
