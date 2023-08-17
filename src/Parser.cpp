@@ -422,9 +422,7 @@ namespace sam {
 			return std::nullopt;
 		}
 
-		if (dot == 0) {
-			return Name{ name, "", name };
-		} else if (dot == 1) {
+		if (dot == 1) {
 			const std::size_t lastDot = name.find_last_of('.');
 			if (lastDot == std::string::npos) {
 				return Name{ "", name, name };
@@ -444,6 +442,8 @@ namespace sam {
 			} else {
 				return Name{ name.substr(0, prevLastDot), name.substr(prevLastDot + 1), name };
 			}
+		} else {
+			return Name{ name, "", name };
 		}
 	}
 	bool Parser::ParseExternModule(const Name& namespaceName, const std::string& path) {
@@ -459,9 +459,9 @@ namespace sam {
 				realPath.erase(realPath.begin());
 			} else {
 				for (const char* directory : m_ImportDirectories) {
-					const auto path = std::filesystem::path(directory) / resolvedPath.substr(1);
-					if (std::filesystem::exists(path)) {
-						realPath = std::filesystem::weakly_canonical(path).generic_string();
+					const auto tempPath = std::filesystem::path(directory) / resolvedPath.substr(1);
+					if (std::filesystem::exists(tempPath)) {
+						realPath = std::filesystem::weakly_canonical(tempPath).generic_string();
 						goto parse;
 					}
 				}
