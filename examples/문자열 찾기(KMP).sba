@@ -1,0 +1,1534 @@
+import "/std/io.sba" as io
+import "/std/string.sba" as str
+
+func createOrgString:
+	call str.create32
+	store result
+
+	push 72 ; 'H'
+	lea result
+	call str.push
+	push 101 ; 'e'
+	lea result
+	call str.push
+	push 108 ; 'l'
+	lea result
+	call str.push
+	push 108 ; 'l'
+	lea result
+	call str.push
+	push 111 ; 'o'
+	lea result
+	call str.push
+	push 44 ; ','
+	lea result
+	call str.push
+	push 32 ; ' '
+	lea result
+	call str.push
+	push 109 ; 'm'
+	lea result
+	call str.push
+	push 121 ; 'y'
+	lea result
+	call str.push
+	push 32 ; ' '
+	lea result
+	call str.push
+	push 110 ; 'n'
+	lea result
+	call str.push
+	push 97 ; 'a'
+	lea result
+	call str.push
+	push 109 ; 'm'
+	lea result
+	call str.push
+	push 101 ; 'e'
+	lea result
+	call str.push
+	push 32 ; ' '
+	lea result
+	call str.push
+	push 105 ; 'i'
+	lea result
+	call str.push
+	push 115 ; 's'
+	lea result
+	call str.push
+	push 32 ; ' '
+	lea result
+	call str.push
+	push 74 ; 'J'
+	lea result
+	call str.push
+	push 111 ; 'o'
+	lea result
+	call str.push
+	push 32 ; ' '
+	lea result
+	call str.push
+	push 89 ; 'Y'
+	lea result
+	call str.push
+	push 117 ; 'u'
+	lea result
+	call str.push
+	push 114 ; 'r'
+	lea result
+	call str.push
+	push 105 ; 'i'
+	lea result
+	call str.push
+	push 46 ; '.'
+	lea result
+	call str.push
+	push 72 ; 'H'
+	lea result
+	call str.push
+	push 101 ; 'e'
+	lea result
+	call str.push
+	push 108 ; 'l'
+	lea result
+	call str.push
+	push 108 ; 'l'
+	lea result
+	call str.push
+	push 111 ; 'o'
+	lea result
+	call str.push
+	push 44 ; ','
+	lea result
+	call str.push
+	push 32 ; ' '
+	lea result
+	call str.push
+	push 109 ; 'm'
+	lea result
+	call str.push
+	push 121 ; 'y'
+	lea result
+	call str.push
+	push 32 ; ' '
+	lea result
+	call str.push
+	push 110 ; 'n'
+	lea result
+	call str.push
+	push 97 ; 'a'
+	lea result
+	call str.push
+	push 109 ; 'm'
+	lea result
+	call str.push
+	push 101 ; 'e'
+	lea result
+	call str.push
+	push 32 ; ' '
+	lea result
+	call str.push
+	push 105 ; 'i'
+	lea result
+	call str.push
+	push 115 ; 's'
+	lea result
+	call str.push
+	push 32 ; ' '
+	lea result
+	call str.push
+	push 67 ; 'C'
+	lea result
+	call str.push
+	push 104 ; 'h'
+	lea result
+	call str.push
+	push 111 ; 'o'
+	lea result
+	call str.push
+	push 105 ; 'i'
+	lea result
+	call str.push
+	push 32 ; ' '
+	lea result
+	call str.push
+	push 89 ; 'Y'
+	lea result
+	call str.push
+	push 101 ; 'e'
+	lea result
+	call str.push
+	push 110 ; 'n'
+	lea result
+	call str.push
+	push 97 ; 'a'
+	lea result
+	call str.push
+	push 46 ; '.'
+	lea result
+	call str.push
+	push 72 ; 'H'
+	lea result
+	call str.push
+	push 101 ; 'e'
+	lea result
+	call str.push
+	push 108 ; 'l'
+	lea result
+	call str.push
+	push 108 ; 'l'
+	lea result
+	call str.push
+	push 111 ; 'o'
+	lea result
+	call str.push
+	push 44 ; ','
+	lea result
+	call str.push
+	push 32 ; ' '
+	lea result
+	call str.push
+	push 109 ; 'm'
+	lea result
+	call str.push
+	push 121 ; 'y'
+	lea result
+	call str.push
+	push 32 ; ' '
+	lea result
+	call str.push
+	push 110 ; 'n'
+	lea result
+	call str.push
+	push 97 ; 'a'
+	lea result
+	call str.push
+	push 109 ; 'm'
+	lea result
+	call str.push
+	push 101 ; 'e'
+	lea result
+	call str.push
+	push 32 ; ' '
+	lea result
+	call str.push
+	push 105 ; 'i'
+	lea result
+	call str.push
+	push 115 ; 's'
+	lea result
+	call str.push
+	push 32 ; ' '
+	lea result
+	call str.push
+	push 65 ; 'A'
+	lea result
+	call str.push
+	push 110 ; 'n'
+	lea result
+	call str.push
+	push 32 ; ' '
+	lea result
+	call str.push
+	push 89 ; 'Y'
+	lea result
+	call str.push
+	push 117 ; 'u'
+	lea result
+	call str.push
+	push 106 ; 'j'
+	lea result
+	call str.push
+	push 105 ; 'i'
+	lea result
+	call str.push
+	push 110 ; 'n'
+	lea result
+	call str.push
+	push 46 ; '.'
+	lea result
+	call str.push
+	push 72 ; 'H'
+	lea result
+	call str.push
+	push 101 ; 'e'
+	lea result
+	call str.push
+	push 108 ; 'l'
+	lea result
+	call str.push
+	push 108 ; 'l'
+	lea result
+	call str.push
+	push 111 ; 'o'
+	lea result
+	call str.push
+	push 44 ; ','
+	lea result
+	call str.push
+	push 32 ; ' '
+	lea result
+	call str.push
+	push 109 ; 'm'
+	lea result
+	call str.push
+	push 121 ; 'y'
+	lea result
+	call str.push
+	push 32 ; ' '
+	lea result
+	call str.push
+	push 110 ; 'n'
+	lea result
+	call str.push
+	push 97 ; 'a'
+	lea result
+	call str.push
+	push 109 ; 'm'
+	lea result
+	call str.push
+	push 101 ; 'e'
+	lea result
+	call str.push
+	push 32 ; ' '
+	lea result
+	call str.push
+	push 105 ; 'i'
+	lea result
+	call str.push
+	push 115 ; 's'
+	lea result
+	call str.push
+	push 32 ; ' '
+	lea result
+	call str.push
+	push 75 ; 'K'
+	lea result
+	call str.push
+	push 105 ; 'i'
+	lea result
+	call str.push
+	push 109 ; 'm'
+	lea result
+	call str.push
+	push 32 ; ' '
+	lea result
+	call str.push
+	push 71 ; 'G'
+	lea result
+	call str.push
+	push 97 ; 'a'
+	lea result
+	call str.push
+	push 101 ; 'e'
+	lea result
+	call str.push
+	push 117 ; 'u'
+	lea result
+	call str.push
+	push 108 ; 'l'
+	lea result
+	call str.push
+	push 46 ; '.'
+	lea result
+	call str.push
+	push 72 ; 'H'
+	lea result
+	call str.push
+	push 101 ; 'e'
+	lea result
+	call str.push
+	push 108 ; 'l'
+	lea result
+	call str.push
+	push 108 ; 'l'
+	lea result
+	call str.push
+	push 111 ; 'o'
+	lea result
+	call str.push
+	push 44 ; ','
+	lea result
+	call str.push
+	push 32 ; ' '
+	lea result
+	call str.push
+	push 109 ; 'm'
+	lea result
+	call str.push
+	push 121 ; 'y'
+	lea result
+	call str.push
+	push 32 ; ' '
+	lea result
+	call str.push
+	push 110 ; 'n'
+	lea result
+	call str.push
+	push 97 ; 'a'
+	lea result
+	call str.push
+	push 109 ; 'm'
+	lea result
+	call str.push
+	push 101 ; 'e'
+	lea result
+	call str.push
+	push 32 ; ' '
+	lea result
+	call str.push
+	push 105 ; 'i'
+	lea result
+	call str.push
+	push 115 ; 's'
+	lea result
+	call str.push
+	push 32 ; ' '
+	lea result
+	call str.push
+	push 74 ; 'J'
+	lea result
+	call str.push
+	push 97 ; 'a'
+	lea result
+	call str.push
+	push 110 ; 'n'
+	lea result
+	call str.push
+	push 103 ; 'g'
+	lea result
+	call str.push
+	push 32 ; ' '
+	lea result
+	call str.push
+	push 87 ; 'W'
+	lea result
+	call str.push
+	push 111 ; 'o'
+	lea result
+	call str.push
+	push 110 ; 'n'
+	lea result
+	call str.push
+	push 121 ; 'y'
+	lea result
+	call str.push
+	push 111 ; 'o'
+	lea result
+	call str.push
+	push 117 ; 'u'
+	lea result
+	call str.push
+	push 110 ; 'n'
+	lea result
+	call str.push
+	push 103 ; 'g'
+	lea result
+	call str.push
+	push 46 ; '.'
+	lea result
+	call str.push
+	push 72 ; 'H'
+	lea result
+	call str.push
+	push 101 ; 'e'
+	lea result
+	call str.push
+	push 108 ; 'l'
+	lea result
+	call str.push
+	push 108 ; 'l'
+	lea result
+	call str.push
+	push 111 ; 'o'
+	lea result
+	call str.push
+	push 44 ; ','
+	lea result
+	call str.push
+	push 32 ; ' '
+	lea result
+	call str.push
+	push 109 ; 'm'
+	lea result
+	call str.push
+	push 121 ; 'y'
+	lea result
+	call str.push
+	push 32 ; ' '
+	lea result
+	call str.push
+	push 110 ; 'n'
+	lea result
+	call str.push
+	push 97 ; 'a'
+	lea result
+	call str.push
+	push 109 ; 'm'
+	lea result
+	call str.push
+	push 101 ; 'e'
+	lea result
+	call str.push
+	push 32 ; ' '
+	lea result
+	call str.push
+	push 105 ; 'i'
+	lea result
+	call str.push
+	push 115 ; 's'
+	lea result
+	call str.push
+	push 32 ; ' '
+	lea result
+	call str.push
+	push 75 ; 'K'
+	lea result
+	call str.push
+	push 105 ; 'i'
+	lea result
+	call str.push
+	push 109 ; 'm'
+	lea result
+	call str.push
+	push 32 ; ' '
+	lea result
+	call str.push
+	push 74 ; 'J'
+	lea result
+	call str.push
+	push 105 ; 'i'
+	lea result
+	call str.push
+	push 119 ; 'w'
+	lea result
+	call str.push
+	push 111 ; 'o'
+	lea result
+	call str.push
+	push 110 ; 'n'
+	lea result
+	call str.push
+	push 46 ; '.'
+	lea result
+	call str.push
+	push 72 ; 'H'
+	lea result
+	call str.push
+	push 101 ; 'e'
+	lea result
+	call str.push
+	push 108 ; 'l'
+	lea result
+	call str.push
+	push 108 ; 'l'
+	lea result
+	call str.push
+	push 111 ; 'o'
+	lea result
+	call str.push
+	push 44 ; ','
+	lea result
+	call str.push
+	push 32 ; ' '
+	lea result
+	call str.push
+	push 109 ; 'm'
+	lea result
+	call str.push
+	push 121 ; 'y'
+	lea result
+	call str.push
+	push 32 ; ' '
+	lea result
+	call str.push
+	push 110 ; 'n'
+	lea result
+	call str.push
+	push 97 ; 'a'
+	lea result
+	call str.push
+	push 109 ; 'm'
+	lea result
+	call str.push
+	push 101 ; 'e'
+	lea result
+	call str.push
+	push 32 ; ' '
+	lea result
+	call str.push
+	push 105 ; 'i'
+	lea result
+	call str.push
+	push 115 ; 's'
+	lea result
+	call str.push
+	push 32 ; ' '
+	lea result
+	call str.push
+	push 76 ; 'L'
+	lea result
+	call str.push
+	push 101 ; 'e'
+	lea result
+	call str.push
+	push 101 ; 'e'
+	lea result
+	call str.push
+	push 32 ; ' '
+	lea result
+	call str.push
+	push 72 ; 'H'
+	lea result
+	call str.push
+	push 121 ; 'y'
+	lea result
+	call str.push
+	push 101 ; 'e'
+	lea result
+	call str.push
+	push 111 ; 'o'
+	lea result
+	call str.push
+	push 110 ; 'n'
+	lea result
+	call str.push
+	push 115 ; 's'
+	lea result
+	call str.push
+	push 101 ; 'e'
+	lea result
+	call str.push
+	push 111 ; 'o'
+	lea result
+	call str.push
+	push 46 ; '.'
+	lea result
+	call str.push
+	push 72 ; 'H'
+	lea result
+	call str.push
+	push 101 ; 'e'
+	lea result
+	call str.push
+	push 108 ; 'l'
+	lea result
+	call str.push
+	push 108 ; 'l'
+	lea result
+	call str.push
+	push 111 ; 'o'
+	lea result
+	call str.push
+	push 44 ; ','
+	lea result
+	call str.push
+	push 32 ; ' '
+	lea result
+	call str.push
+	push 109 ; 'm'
+	lea result
+	call str.push
+	push 121 ; 'y'
+	lea result
+	call str.push
+	push 32 ; ' '
+	lea result
+	call str.push
+	push 110 ; 'n'
+	lea result
+	call str.push
+	push 97 ; 'a'
+	lea result
+	call str.push
+	push 109 ; 'm'
+	lea result
+	call str.push
+	push 101 ; 'e'
+	lea result
+	call str.push
+	push 32 ; ' '
+	lea result
+	call str.push
+	push 105 ; 'i'
+	lea result
+	call str.push
+	push 115 ; 's'
+	lea result
+	call str.push
+	push 32 ; ' '
+	lea result
+	call str.push
+	push 76 ; 'L'
+	lea result
+	call str.push
+	push 101 ; 'e'
+	lea result
+	call str.push
+	push 101 ; 'e'
+	lea result
+	call str.push
+	push 32 ; ' '
+	lea result
+	call str.push
+	push 72 ; 'H'
+	lea result
+	call str.push
+	push 121 ; 'y'
+	lea result
+	call str.push
+	push 101 ; 'e'
+	lea result
+	call str.push
+	push 105 ; 'i'
+	lea result
+	call str.push
+	push 110 ; 'n'
+	lea result
+	call str.push
+	push 46 ; '.'
+	lea result
+	call str.push
+	push 72 ; 'H'
+	lea result
+	call str.push
+	push 101 ; 'e'
+	lea result
+	call str.push
+	push 108 ; 'l'
+	lea result
+	call str.push
+	push 108 ; 'l'
+	lea result
+	call str.push
+	push 111 ; 'o'
+	lea result
+	call str.push
+	push 44 ; ','
+	lea result
+	call str.push
+	push 32 ; ' '
+	lea result
+	call str.push
+	push 109 ; 'm'
+	lea result
+	call str.push
+	push 121 ; 'y'
+	lea result
+	call str.push
+	push 32 ; ' '
+	lea result
+	call str.push
+	push 110 ; 'n'
+	lea result
+	call str.push
+	push 97 ; 'a'
+	lea result
+	call str.push
+	push 109 ; 'm'
+	lea result
+	call str.push
+	push 101 ; 'e'
+	lea result
+	call str.push
+	push 32 ; ' '
+	lea result
+	call str.push
+	push 105 ; 'i'
+	lea result
+	call str.push
+	push 115 ; 's'
+	lea result
+	call str.push
+	push 32 ; ' '
+	lea result
+	call str.push
+	push 75 ; 'K'
+	lea result
+	call str.push
+	push 97 ; 'a'
+	lea result
+	call str.push
+	push 110 ; 'n'
+	lea result
+	call str.push
+	push 103 ; 'g'
+	lea result
+	call str.push
+	push 32 ; ' '
+	lea result
+	call str.push
+	push 72 ; 'H'
+	lea result
+	call str.push
+	push 97 ; 'a'
+	lea result
+	call str.push
+	push 101 ; 'e'
+	lea result
+	call str.push
+	push 114 ; 'r'
+	lea result
+	call str.push
+	push 105 ; 'i'
+	lea result
+	call str.push
+	push 110 ; 'n'
+	lea result
+	call str.push
+	push 46 ; '.'
+	lea result
+	call str.push
+	push 72 ; 'H'
+	lea result
+	call str.push
+	push 101 ; 'e'
+	lea result
+	call str.push
+	push 108 ; 'l'
+	lea result
+	call str.push
+	push 108 ; 'l'
+	lea result
+	call str.push
+	push 111 ; 'o'
+	lea result
+	call str.push
+	push 44 ; ','
+	lea result
+	call str.push
+	push 32 ; ' '
+	lea result
+	call str.push
+	push 109 ; 'm'
+	lea result
+	call str.push
+	push 121 ; 'y'
+	lea result
+	call str.push
+	push 32 ; ' '
+	lea result
+	call str.push
+	push 110 ; 'n'
+	lea result
+	call str.push
+	push 97 ; 'a'
+	lea result
+	call str.push
+	push 109 ; 'm'
+	lea result
+	call str.push
+	push 101 ; 'e'
+	lea result
+	call str.push
+	push 32 ; ' '
+	lea result
+	call str.push
+	push 105 ; 'i'
+	lea result
+	call str.push
+	push 115 ; 's'
+	lea result
+	call str.push
+	push 32 ; ' '
+	lea result
+	call str.push
+	push 75 ; 'K'
+	lea result
+	call str.push
+	push 105 ; 'i'
+	lea result
+	call str.push
+	push 109 ; 'm'
+	lea result
+	call str.push
+	push 32 ; ' '
+	lea result
+	call str.push
+	push 77 ; 'M'
+	lea result
+	call str.push
+	push 105 ; 'i'
+	lea result
+	call str.push
+	push 110 ; 'n'
+	lea result
+	call str.push
+	push 106 ; 'j'
+	lea result
+	call str.push
+	push 105 ; 'i'
+	lea result
+	call str.push
+	push 46 ; '.'
+	lea result
+	call str.push
+	push 72 ; 'H'
+	lea result
+	call str.push
+	push 101 ; 'e'
+	lea result
+	call str.push
+	push 108 ; 'l'
+	lea result
+	call str.push
+	push 108 ; 'l'
+	lea result
+	call str.push
+	push 111 ; 'o'
+	lea result
+	call str.push
+	push 44 ; ','
+	lea result
+	call str.push
+	push 32 ; ' '
+	lea result
+	call str.push
+	push 109 ; 'm'
+	lea result
+	call str.push
+	push 121 ; 'y'
+	lea result
+	call str.push
+	push 32 ; ' '
+	lea result
+	call str.push
+	push 110 ; 'n'
+	lea result
+	call str.push
+	push 97 ; 'a'
+	lea result
+	call str.push
+	push 109 ; 'm'
+	lea result
+	call str.push
+	push 101 ; 'e'
+	lea result
+	call str.push
+	push 32 ; ' '
+	lea result
+	call str.push
+	push 105 ; 'i'
+	lea result
+	call str.push
+	push 115 ; 's'
+	lea result
+	call str.push
+	push 32 ; ' '
+	lea result
+	call str.push
+	push 89 ; 'Y'
+	lea result
+	call str.push
+	push 117 ; 'u'
+	lea result
+	call str.push
+	push 32 ; ' '
+	lea result
+	call str.push
+	push 74 ; 'J'
+	lea result
+	call str.push
+	push 105 ; 'i'
+	lea result
+	call str.push
+	push 109 ; 'm'
+	lea result
+	call str.push
+	push 105 ; 'i'
+	lea result
+	call str.push
+	push 110 ; 'n'
+	lea result
+	call str.push
+	push 46 ; '.'
+	lea result
+	call str.push
+	push 72 ; 'H'
+	lea result
+	call str.push
+	push 101 ; 'e'
+	lea result
+	call str.push
+	push 108 ; 'l'
+	lea result
+	call str.push
+	push 108 ; 'l'
+	lea result
+	call str.push
+	push 111 ; 'o'
+	lea result
+	call str.push
+	push 44 ; ','
+	lea result
+	call str.push
+	push 32 ; ' '
+	lea result
+	call str.push
+	push 109 ; 'm'
+	lea result
+	call str.push
+	push 121 ; 'y'
+	lea result
+	call str.push
+	push 32 ; ' '
+	lea result
+	call str.push
+	push 110 ; 'n'
+	lea result
+	call str.push
+	push 97 ; 'a'
+	lea result
+	call str.push
+	push 109 ; 'm'
+	lea result
+	call str.push
+	push 101 ; 'e'
+	lea result
+	call str.push
+	push 32 ; ' '
+	lea result
+	call str.push
+	push 105 ; 'i'
+	lea result
+	call str.push
+	push 115 ; 's'
+	lea result
+	call str.push
+	push 32 ; ' '
+	lea result
+	call str.push
+	push 75 ; 'K'
+	lea result
+	call str.push
+	push 105 ; 'i'
+	lea result
+	call str.push
+	push 109 ; 'm'
+	lea result
+	call str.push
+	push 32 ; ' '
+	lea result
+	call str.push
+	push 77 ; 'M'
+	lea result
+	call str.push
+	push 105 ; 'i'
+	lea result
+	call str.push
+	push 110 ; 'n'
+	lea result
+	call str.push
+	push 106 ; 'j'
+	lea result
+	call str.push
+	push 101 ; 'e'
+	lea result
+	call str.push
+	push 111 ; 'o'
+	lea result
+	call str.push
+	push 110 ; 'n'
+	lea result
+	call str.push
+	push 103 ; 'g'
+	lea result
+	call str.push
+	push 46 ; '.'
+	lea result
+	call str.push
+	push 72 ; 'H'
+	lea result
+	call str.push
+	push 101 ; 'e'
+	lea result
+	call str.push
+	push 108 ; 'l'
+	lea result
+	call str.push
+	push 108 ; 'l'
+	lea result
+	call str.push
+	push 111 ; 'o'
+	lea result
+	call str.push
+	push 44 ; ','
+	lea result
+	call str.push
+	push 32 ; ' '
+	lea result
+	call str.push
+	push 109 ; 'm'
+	lea result
+	call str.push
+	push 121 ; 'y'
+	lea result
+	call str.push
+	push 32 ; ' '
+	lea result
+	call str.push
+	push 110 ; 'n'
+	lea result
+	call str.push
+	push 97 ; 'a'
+	lea result
+	call str.push
+	push 109 ; 'm'
+	lea result
+	call str.push
+	push 101 ; 'e'
+	lea result
+	call str.push
+	push 32 ; ' '
+	lea result
+	call str.push
+	push 105 ; 'i'
+	lea result
+	call str.push
+	push 115 ; 's'
+	lea result
+	call str.push
+	push 32 ; ' '
+	lea result
+	call str.push
+	push 75 ; 'K'
+	lea result
+	call str.push
+	push 105 ; 'i'
+	lea result
+	call str.push
+	push 109 ; 'm'
+	lea result
+	call str.push
+	push 32 ; ' '
+	lea result
+	call str.push
+	push 67 ; 'C'
+	lea result
+	call str.push
+	push 104 ; 'h'
+	lea result
+	call str.push
+	push 97 ; 'a'
+	lea result
+	call str.push
+	push 101 ; 'e'
+	lea result
+	call str.push
+	push 119 ; 'w'
+	lea result
+	call str.push
+	push 111 ; 'o'
+	lea result
+	call str.push
+	push 110 ; 'n'
+	lea result
+	call str.push
+	push 46 ; '.'
+	lea result
+	call str.push
+	push 72 ; 'H'
+	lea result
+	call str.push
+	push 101 ; 'e'
+	lea result
+	call str.push
+	push 108 ; 'l'
+	lea result
+	call str.push
+	push 108 ; 'l'
+	lea result
+	call str.push
+	push 111 ; 'o'
+	lea result
+	call str.push
+	push 44 ; ','
+	lea result
+	call str.push
+	push 32 ; ' '
+	lea result
+	call str.push
+	push 109 ; 'm'
+	lea result
+	call str.push
+	push 121 ; 'y'
+	lea result
+	call str.push
+	push 32 ; ' '
+	lea result
+	call str.push
+	push 110 ; 'n'
+	lea result
+	call str.push
+	push 97 ; 'a'
+	lea result
+	call str.push
+	push 109 ; 'm'
+	lea result
+	call str.push
+	push 101 ; 'e'
+	lea result
+	call str.push
+	push 32 ; ' '
+	lea result
+	call str.push
+	push 105 ; 'i'
+	lea result
+	call str.push
+	push 115 ; 's'
+	lea result
+	call str.push
+	push 32 ; ' '
+	lea result
+	call str.push
+	push 72 ; 'H'
+	lea result
+	call str.push
+	push 111 ; 'o'
+	lea result
+	call str.push
+	push 110 ; 'n'
+	lea result
+	call str.push
+	push 103 ; 'g'
+	lea result
+	call str.push
+	push 32 ; ' '
+	lea result
+	call str.push
+	push 69 ; 'E'
+	lea result
+	call str.push
+	push 117 ; 'u'
+	lea result
+	call str.push
+	push 110 ; 'n'
+	lea result
+	call str.push
+	push 99 ; 'c'
+	lea result
+	call str.push
+	push 104 ; 'h'
+	lea result
+	call str.push
+	push 97 ; 'a'
+	lea result
+	call str.push
+	push 101 ; 'e'
+	lea result
+	call str.push
+	push 46 ; '.'
+	lea result
+	call str.push
+
+	load result
+	ret
+
+func createPatString:
+	call str.create32
+	store result
+
+	push 72 ; 'H'
+	lea result
+	call str.push
+	push 101 ; 'e'
+	lea result
+	call str.push
+	push 108 ; 'l'
+	lea result
+	call str.push
+	push 108 ; 'l'
+	lea result
+	call str.push
+	push 111 ; 'o'
+	lea result
+	call str.push
+	push 44 ; ','
+	lea result
+	call str.push
+	push 32 ; ' '
+	lea result
+	call str.push
+	push 109 ; 'm'
+	lea result
+	call str.push
+	push 121 ; 'y'
+	lea result
+	call str.push
+	push 32 ; ' '
+	lea result
+	call str.push
+	push 110 ; 'n'
+	lea result
+	call str.push
+	push 97 ; 'a'
+	lea result
+	call str.push
+	push 109 ; 'm'
+	lea result
+	call str.push
+	push 101 ; 'e'
+	lea result
+	call str.push
+	push 32 ; ' '
+	lea result
+	call str.push
+	push 105 ; 'i'
+	lea result
+	call str.push
+	push 115 ; 's'
+	lea result
+	call str.push
+	push 32 ; ' '
+	lea result
+	call str.push
+	push 75 ; 'K'
+	lea result
+	call str.push
+	push 105 ; 'i'
+	lea result
+	call str.push
+	push 109 ; 'm'
+	lea result
+	call str.push
+	push 32 ; ' '
+	lea result
+	call str.push
+	push 77 ; 'M'
+	lea result
+	call str.push
+	push 105 ; 'i'
+	lea result
+	call str.push
+	push 110 ; 'n'
+	lea result
+	call str.push
+	push 106 ; 'j'
+	lea result
+	call str.push
+	push 101 ; 'e'
+	lea result
+	call str.push
+	push 111 ; 'o'
+	lea result
+	call str.push
+	push 110 ; 'n'
+	lea result
+	call str.push
+	push 103 ; 'g'
+	lea result
+	call str.push
+	push 46 ; '.'
+	lea result
+	call str.push
+
+	load result
+	ret
+
+func getChar(string, index):
+    load string
+    flea str.String32.data
+    tload
+    load index
+    alea
+    tload
+    ret
+
+func createTable(string):
+    load string
+    flea str.String32.length
+    tload
+    push 1l
+    add
+    store tableLength
+
+    load tableLength
+    anew long[]
+    store table
+
+    load table
+    push 0
+    alea
+    push 18446744073709551615l ; -1
+    tstore
+    
+    push 1l
+    store i
+initLoop:
+    load i
+    load tableLength
+    cmp
+    je initBreak
+
+    load table
+    load i
+    alea
+    push 0l
+    tstore
+    
+    lea i
+    inc
+    jmp initLoop
+
+initBreak:
+    push 1l
+    store i
+
+    push 0l
+    store j
+genLoop:
+    load i
+    load tableLength
+    push 1l
+    sub
+    cmp
+    je genBreak
+
+inLoop:
+    load j
+    load string
+    call getChar
+    load i
+    load string
+    call getChar
+    cmp
+    je inBreak
+
+    load j
+    push 0l
+    cmp
+    je inBreak
+
+    load table
+    load j
+    alea
+    tload
+    store j
+    jmp inLoop
+
+inBreak:
+    load j
+    load string
+    call getChar
+    load i
+    load string
+    call getChar
+    cmp
+    jne genNext
+
+    load table
+    load i
+    push 1l
+    add
+    alea
+
+    load j
+    push 1l
+    add
+    copy
+    store j
+    tstore
+
+genNext:
+    lea i
+    inc
+    jmp genLoop
+
+genBreak:
+    load table
+    ret
+
+proc entrypoint:
+    call createOrgString
+    store orgString
+
+    lea orgString
+    flea str.String32.length
+    tload
+    store orgLength
+
+    call createPatString
+    store patString
+
+    lea patString
+    flea str.String32.length
+    tload
+    store patLength
+
+    lea patString
+    call createTable
+    store table
+
+    push 0l
+    store dist
+
+    push 0l
+    store count
+
+outLoop:
+    push 0l
+    store i
+
+    load i
+    load dist
+    load patLength
+    add
+    add
+
+    load orgLength
+    cmp
+    ja outFail
+
+inLoop:
+    load i
+    load dist
+    add
+    lea orgString
+    call getChar
+
+    load count
+    lea patString
+    call getChar
+    
+    cmp
+    jne inBreak
+
+    lea count
+    inc
+    lea i
+    inc
+
+    load count
+    load patLength
+    cmp
+    jne inLoop
+
+    load dist
+    call io.getStdout
+    call io.writeLong
+    ret
+
+inBreak:
+    load count
+    load table
+    load count
+    alea
+    tload
+    sub
+    load dist
+    add
+    store dist
+
+    push 0l
+    store count
+    jmp outLoop
+
+outFail:
+    push 4294967295 ; -1
+    call io.getStdout
+    call io.writeSignedInt
+
+; 출력
+; 313
+; 결과
+; 0

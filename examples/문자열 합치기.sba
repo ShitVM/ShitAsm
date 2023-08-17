@@ -1,0 +1,99 @@
+import "/std/io.sba" as io
+import "/std/string.sba" as str
+
+func readString32(stream):
+    call str.create32
+    store string
+
+    load stream
+    call io.readInt
+    store length
+loop:
+    push 0
+    load length
+    cmp
+    je break
+
+    load stream
+    call io.readChar32
+    lea string
+    call str.push
+
+    load length
+    push 1
+    sub
+    store length
+    jmp loop
+
+break:
+    load string
+    ret
+
+proc writeString32(stream, string):
+    lea string    
+    flea str.String32.data
+    tload
+    store ptr
+
+    lea string
+    flea str.String32.length
+    tload
+    toi
+    store length
+
+    push 0
+    store index
+loop:
+    load index
+    load length
+    cmp
+    je break
+
+    load ptr
+    load index
+    alea
+    tload
+    load stream
+    call io.writeChar32
+    
+    push 1
+    load index
+    add
+    store index
+    jmp loop
+
+break:
+    ret
+
+proc entrypoint:
+    call io.getStdin
+    store stdin
+    call io.getStdout
+    store stdout
+
+    load stdin
+    call readString32
+    store a
+
+    load stdin
+    call readString32
+    store b
+
+    lea b
+    lea a
+    call str.concat
+
+    load a
+    load stdout
+    call writeString32
+
+    push 10
+    load stdout
+    call io.writeChar32
+
+; 입력 예
+; 5 hello 5 world
+; 출력 예
+; helloworld
+; 결과 예
+; String32(????(int[8]{119, 111, 114, 108, 100, 0, 0, 0}), 5, 8)

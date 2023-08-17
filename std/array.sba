@@ -1,0 +1,5 @@
+func getLength(arrayPtr):
+
+proc copy(destPtr, destBegin, srcPtr, srcBegin, count):
+
+proc entrypoint:

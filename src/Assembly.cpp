@@ -10,6 +10,11 @@ namespace sam {
 			return dependency.Path == path;
 		});
 	}
+	std::vector<ExternModule>::iterator Assembly::FindDependencyByNameSpace(const std::string& nameSpace) {
+		return std::find_if(Dependencies.begin(), Dependencies.end(), [nameSpace](const ExternModule& dependency) {
+			return dependency.NameSpace == nameSpace;
+		});
+	}
 	ExternModule& Assembly::GetDependency(const std::string& path) {
 		return *FindDependency(path);
 	}

@@ -1,2 +1,3 @@
 # 문서
-- [문법](https://github.com/ShitVM/ShitAsm/blob/master/docs/Syntax.md)
+- [문법](Syntax.md)
+- [ShitVM 표준 라이브러리](Standard%20Library.md)

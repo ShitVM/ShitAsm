@@ -7,6 +7,8 @@
 
 #include <algorithm>
 #include <cctype>
+#include <filesystem>
+#include <fstream>
 #include <iterator>
 #include <limits>
 #include <memory>
@@ -14,8 +16,8 @@
 #include <utility>
 
 namespace sam {
-	Parser::Parser(std::string path, std::vector<Token> tokens) noexcept
-		: m_Path(std::move(path)), m_Tokens(std::move(tokens)) {}
+	Parser::Parser(std::string path, std::vector<Token> tokens, int depth) noexcept
+		: m_Path(std::move(path)), m_Tokens(std::move(tokens)), m_Depth(depth) {}
 
 #define CURRENT_TOKEN (&GetToken(m_Token))
 
@@ -25,13 +27,16 @@ namespace sam {
 #define ERROR (m_HasError = true, MESSAGEBASE) << "Error: Line " << CURRENT_TOKEN->Line << ", "
 
 	void Parser::Parse() {
-		if (!FirstPass()) return;
+		if (!FirstPass() || m_Depth > 1) return; // Prototypes
 		ResetState();
 
-		if (!SecondPass()) return;
+		if (!SecondPass()) return; // Dependencies
 		ResetState();
 
-		ThirdPass();
+		if (!ThirdPass() || m_Depth > 0) return; // Strucutre fields
+		ResetState();
+
+		FourthPass(); // Function instructions
 	}
 	Assembly Parser::GetAssembly() noexcept {
 		return std::move(m_Result);
@@ -94,7 +99,7 @@ namespace sam {
 			hasError |= NextLine((this->*function)());
 		}
 
-		if (isFirst) {
+		if (isFirst && m_Depth == 0) {
 			if (!m_Result.HasFunction("entrypoint")) {
 				MESSAGEBASE << "Error: There is no 'entrypoint' procedure.\n";
 				hasError = true;
@@ -108,9 +113,12 @@ namespace sam {
 		return Pass(&Parser::ParsePrototypes, true);
 	}
 	bool Parser::SecondPass() {
-		return Pass(&Parser::ParseFields, false);
+		return Pass(&Parser::ParseDependencies, false);
 	}
 	bool Parser::ThirdPass() {
+		return Pass(&Parser::ParseFields, false);
+	}
+	bool Parser::FourthPass() {
 		return Pass(&Parser::ParseInstructions, false);
 	}
 	void Parser::GenerateBuilders() {
@@ -132,9 +140,42 @@ namespace sam {
 		}
 	}
 
+	bool Parser::IgnoreImport() {
+		const Token* token = nullptr;
+		while (!AcceptOr(token, TokenType::None, TokenType::NewLine)) {
+			++m_Token;
+		}
+
+		--m_Token;
+		return false;
+	}
+	bool Parser::IgnoreStructure() {
+		m_CurrentStructure = &m_Result.GetStructure(GetToken(m_Token).Word);
+		m_CurrentFunction = nullptr;
+
+		m_Token += 2;
+		return false;
+	}
+	bool Parser::IgnoreFunction() {
+		m_CurrentStructure = nullptr;
+		m_CurrentFunction = &m_Result.GetFunction(GetToken(m_Token).Word);
+
+		const Token* token = nullptr;
+		while (!Accept(token, TokenType::Colon)) {
+			++m_Token;
+		}
+
+		return false;
+	}
+	bool Parser::IgnoreLabel() {
+		m_Token += 2;
+		return false;
+	}
+
 	int Parser::ParsePrototypes() {
 		const Token* token = nullptr;
-		if (Accept(token, TokenType::StructKeyword)) return ParseStructure();
+		if (Accept(token, TokenType::ImportKeyword)) return IgnoreImport();
+		else if (Accept(token, TokenType::StructKeyword)) return ParseStructure();
 		else if (AcceptOr(token, TokenType::FuncKeyword, TokenType::ProcKeyword)) return ParseFunction(token->Type == TokenType::FuncKeyword);
 		else if (GetToken(m_Token + 1).Type == TokenType::Colon) return ParseLabel();
 		else return 2;
@@ -294,32 +335,233 @@ namespace sam {
 		return hasError;
 	}
 
-	bool Parser::IgnoreStructure() {
-		m_CurrentStructure = &m_Result.GetStructure(GetToken(m_Token).Word);
-		m_CurrentFunction = nullptr;
-
-		m_Token += 2;
-		return false;
+	int Parser::ParseDependencies() {
+		const Token* token = nullptr;
+		if (Accept(token, TokenType::ImportKeyword)) return ParseImport();
+		else if (Accept(token, TokenType::StructKeyword)) return IgnoreStructure();
+		else if (AcceptOr(token, TokenType::FuncKeyword, TokenType::ProcKeyword)) return IgnoreFunction();
+		else if (GetToken(m_Token + 1).Type == TokenType::Colon) return IgnoreLabel();
+		else return 2;
 	}
-	bool Parser::IgnoreFunction() {
-		m_CurrentStructure = nullptr;
-		m_CurrentFunction = &m_Result.GetFunction(GetToken(m_Token).Word);
+	std::optional<Name> Parser::ParseName(const std::string& required, int dot, bool isType, bool isField) {
+		bool hasError = false;
+		std::string name;
 
 		const Token* token = nullptr;
-		while (!Accept(token, TokenType::Colon)) {
-			++m_Token;
+		const Token* beforeToken = nullptr;
+		while (true) {
+			if (AcceptOr(token, TokenType::None, TokenType::NewLine)) {
+				if (!beforeToken) {
+					ERROR << "Required " << required << ".\n";
+					return std::nullopt;
+				} else {
+					--m_Token;
+					break;
+				}
+			} else if (Accept(token, TokenType::Identifier)) {
+				if (beforeToken && beforeToken->Type == TokenType::Identifier) {
+					if (isField) {
+						--m_Token;
+						break;
+					} else {
+						ERROR << "Excepted '.' after namespace name.\n";
+						hasError = true;
+					}
+				} else if (beforeToken && isType && IsTypeKeyword(beforeToken->Type)) {
+					if (isField) {
+						--m_Token;
+						break;
+					} else {
+						ERROR << "Unexcepted identifier after " << required << ".\n";
+						hasError = true;
+					}
+				} else {
+					name.append(token->Word);
+				}
+			} else if (Accept(token, TokenType::Dot)) {
+				if (!beforeToken) {
+					ERROR << "Excepted " << required << " before '.'.\n";
+					hasError = true;
+				} else if (isType && IsTypeKeyword(beforeToken->Type)) {
+					ERROR << "Excepted namespace name after '.'.\n";
+					hasError = true;
+				} else if (beforeToken->Type == TokenType::Dot) {
+					ERROR << "Excepted " << required << " after '.'.\n";
+					hasError = true;
+				} else {
+					name.push_back('.');
+				}
+			} else {
+				if (isType && IsTypeKeyword(GetToken(m_Token).Type)) {
+					token = &GetToken(m_Token++);
+
+					if (beforeToken && beforeToken->Type == TokenType::Identifier) {
+						ERROR << "Excepted '.' after namespace name.\n";
+						hasError = true;
+					} else if (beforeToken && IsTypeKeyword(beforeToken->Type)) {
+						--m_Token;
+						break;
+					} else {
+						name.append(token->Word);
+					}
+				} else if (!beforeToken) {
+					ERROR << "Required " << required << ".\n";
+					return std::nullopt;
+				} else {
+					break;
+				}
+			}
+
+			beforeToken = token;
+		}
+
+		if (hasError) return std::nullopt;
+		else if (beforeToken->Type == TokenType::Dot) {
+			ERROR << "Excepted " << required << " after '.'.\n";
+			return std::nullopt;
+		}
+
+		if (dot == 0) {
+			return Name{ name, "", name };
+		} else if (dot == 1) {
+			const std::size_t lastDot = name.find_last_of('.');
+			if (lastDot == std::string::npos) {
+				return Name{ "", name, name };
+			} else {
+				return Name{ name.substr(0, lastDot), name.substr(lastDot + 1), name };
+			}
+		} else if (dot == 2) {
+			const std::size_t lastDot = name.find_last_of('.');
+			if (lastDot == std::string::npos) {
+				ERROR << "Excepted '.' after identifier.\n";
+				return std::nullopt;
+			}
+
+			const std::size_t prevLastDot = name.find_last_of('.', lastDot - 1);
+			if (prevLastDot == std::string::npos) {
+				return Name{ "", name, name };
+			} else {
+				return Name{ name.substr(0, prevLastDot), name.substr(prevLastDot + 1), name };
+			}
+		}
+	}
+	bool Parser::ParseExternModule(const Name& namespaceName, const std::string& path) {
+		const std::string resolvedPath = std::filesystem::weakly_canonical(path).generic_string();
+		std::string realPath = resolvedPath;
+		if (m_Result.HasDependency(resolvedPath)) {
+			ERROR << "Already imported module '" << path << "'.\n";
+			return true;
+		} else if (path.find("std/") == 0) {
+			WARNING << "Use '/" << path << "' to import the standard library.\n";
+		} else if (resolvedPath[0] == '/') {
+			if (resolvedPath.find("std/")) {
+				realPath.erase(realPath.begin()); // TODO: 라이브러리 디렉터리에서 탐색하도록 변경
+			} else {
+				ERROR << "Failed to open '" << path << "'.\n";
+				return true;
+			}
+		}
+
+		std::ifstream inputStream(realPath);
+		if (!inputStream) {
+			ERROR << "Failed to open '" << path << "'.\n";
+			return true;
+		}
+
+		ExternModule& module = m_Result.Dependencies.emplace_back(ExternModule{ resolvedPath });
+
+		Lexer lexer(path, inputStream);
+		lexer.Lex();
+		if (lexer.HasMessage()) {
+			m_ErrorStream << lexer.GetMessages();
+			if (lexer.HasError()) {
+				m_HasError = true;
+				return true;
+			}
+		}
+
+		Parser parser(path, lexer.GetTokens(), m_Depth + 1);
+		parser.Parse();
+		if (parser.HasMessage()) {
+			m_ErrorStream << parser.GetMessages();
+			if (parser.HasError()) {
+				m_HasError = true;
+				return true;
+			}
+		}
+
+		if (m_Depth <= 1) {
+			module.Assembly = parser.GetAssembly();
+			module.NameSpace = namespaceName.Full;
+			if (resolvedPath[0] == '/') {
+				module.Index = m_Result.ByteFile.AddExternModule(
+					std::filesystem::path(resolvedPath).replace_extension("sbf").generic_string());
+			} else {
+				module.Index = m_Result.ByteFile.AddExternModule(
+					std::filesystem::relative(resolvedPath).replace_extension("sbf").generic_string());
+			}
+
+			const auto moduleInfo = m_Result.ByteFile.GetExternModuleInfo(module.Index);
+
+			for (auto& structure : module.Assembly.Structures) {
+				const auto structureInfo = module.Assembly.ByteFile.GetStructureInfo(structure.Index);
+
+				std::vector<sgn::Field> fields;
+				for (auto& field : structureInfo->Fields) {
+					fields.push_back({ field.Type, field.Count });
+				}
+
+				structure.ExternIndex = moduleInfo->AddStructure(structureInfo->Name, fields);
+			}
+
+			for (auto& function : module.Assembly.Functions) {
+				if (function.Name == "entrypoint") continue;
+
+				const auto functionInfo = module.Assembly.ByteFile.GetFunctionInfo(function.Index);
+
+				function.ExternIndex = moduleInfo->AddFunction(functionInfo->Name, functionInfo->Arity, functionInfo->HasResult);
+			}
 		}
 
 		return false;
 	}
-	bool Parser::IgnoreLabel() {
-		m_Token += 2;
-		return false;
+	bool Parser::ParseImport() {
+		const Token* pathToken = nullptr;
+		if (!Accept(pathToken, TokenType::String)) {
+			if (AcceptOr(pathToken, TokenType::None, TokenType::NewLine)) {
+				ERROR << "Unexcepted end-of-line.\n";
+			} else if (Accept(pathToken, TokenType::AsKeyword)) {
+				ERROR << "Required module path.\n";
+			} else {
+				ERROR << "Excepted module path.\n";
+			}
+			return true;
+		}
+
+		const Token* asToken = nullptr;
+		if (!Accept(asToken, TokenType::AsKeyword)) {
+			ERROR << "Excepted 'as' after module path.\n";
+			return true;
+		}
+
+		auto namespaceName = ParseName("namespace name", 0, false);
+		if (!namespaceName) return true;
+
+		const auto iter = std::find_if(m_Result.Dependencies.begin(), m_Result.Dependencies.end(), [&namespaceName](const auto& module) {
+			return namespaceName->Full == module.NameSpace;
+		});
+		if (iter != m_Result.Dependencies.end()) {
+			ERROR << "Duplicated namespace name '" << namespaceName->Full << "'.\n";
+			return true;
+		}
+
+		return ParseExternModule(*namespaceName, std::get<std::string>(pathToken->Data));
 	}
 
 	int Parser::ParseFields() {
 		const Token* token = nullptr;
-		if (Accept(token, TokenType::StructKeyword)) return IgnoreStructure();
+		if (Accept(token, TokenType::ImportKeyword)) return IgnoreImport();
+		else if (Accept(token, TokenType::StructKeyword)) return IgnoreStructure();
 		else if (AcceptOr(token, TokenType::FuncKeyword, TokenType::ProcKeyword)) return IgnoreFunction();
 		else if (GetToken(m_Token + 1).Type == TokenType::Colon) return IgnoreLabel();
 		else if (m_CurrentStructure) return ParseField();
@@ -368,7 +610,7 @@ namespace sam {
 		if (std::holds_alternative<double>(value)) return std::get<double>(value) < 0;
 		else return std::holds_alternative<std::int32_t>(value) || std::holds_alternative<std::int64_t>(value);
 	}
-	sgn::Type Parser::GetType(const std::string& name) {
+	sgn::Type Parser::GetType(const Name& name, const Structure** outStructure) {
 		static const std::unordered_map<std::string, sgn::Type> fundamental = {
 			{ "int", sgn::IntType },
 			{ "long", sgn::LongType },
@@ -377,40 +619,60 @@ namespace sam {
 			{ "gcpointer", sgn::GCPointerType },
 		};
 
-		const auto iter = fundamental.find(name);
-		if (iter != fundamental.end()) return svm::GetType(sgn::Structures(), iter->second->Code);
+		auto assembly = &m_Result;
+		ExternModule* externModule = nullptr;
 
-		const auto structIter = m_Result.FindStructure(name);
-		if (structIter != m_Result.Structures.end()) return m_Result.ByteFile.GetStructureInfo(structIter->Index)->Type;
-		else return nullptr;
-	}
-	std::optional<Type> Parser::ParseType() {
-		const Token* nameToken = nullptr;
-		if (!Accept(nameToken, TokenType::Identifier)) {
-			if (AcceptOr(nameToken, TokenType::None, TokenType::NewLine)) {
-				ERROR << "Unexcepted end-of-line.\n";
-			} else if (Accept(nameToken, TokenType::LeftBracket)) {
-				ERROR << "Required type name.\n";
-			} else if (IsTypeKeyword(GetToken(m_Token).Type)) {
-				nameToken = &GetToken(m_Token++);
-				goto parseType;
-			} else {
-				ERROR << "Invalid function or procedure name.\n";
+		if (!name.NameSpace.empty()) {
+			const auto dependency = m_Result.FindDependencyByNameSpace(name.NameSpace);
+			if (dependency == m_Result.Dependencies.end()) {
+				ERROR << "Nonexistent namespace '" << name.NameSpace << "'.\n";
+				return nullptr;
 			}
-			return std::nullopt;
+
+			externModule = &*dependency;
+			assembly = &dependency->Assembly;
 		}
 
-	parseType:
-		const sgn::Type type = GetType(nameToken->Word);
+		const auto iter = fundamental.find(name.Identifier);
+		if (iter != fundamental.end()) {
+			if (externModule) {
+				WARNING << "Use just '" << name.Identifier << "' instead of '" << name.Full << "'.\n";
+			}
+			return svm::GetFundamentalType(iter->second->Code);
+		}
+
+		const auto structure = assembly->FindStructure(name.Identifier);
+		if (structure == assembly->Structures.end()) {
+			ERROR << "Nonexistent structure '" << name.Identifier << "'.\n";
+			return nullptr;
+		} else if (structure->ExternIndex && !structure->MappedIndex) {
+			structure->MappedIndex = m_Result.ByteFile.Map(externModule->Index, *structure->ExternIndex);
+		}
+
+		if (outStructure) {
+			*outStructure = &*structure;
+		}
+
+		if (externModule) {
+			return m_Result.ByteFile.GetStructureInfo(*structure->MappedIndex)->Type;
+		} else {
+			return m_Result.ByteFile.GetStructureInfo(structure->Index)->Type;
+		}
+	}
+	std::optional<Type> Parser::ParseType(bool isField) {
+		const auto typeName = ParseName("type name", 1, true, isField);
+		if (!typeName) return std::nullopt;
+	
+		const auto type = GetType(*typeName);
 
 		const Token* maybeLeftBracketToken = nullptr;
-		if (!Accept(maybeLeftBracketToken, TokenType::LeftBracket)) return Type{ type, nameToken->Word };
+		if (!Accept(maybeLeftBracketToken, TokenType::LeftBracket)) return Type{ type, typeName->Full };
 
 		bool hasError = false;
 		std::uint64_t length = 0;
 
 		const Token* lengthOrRightBracketToken = nullptr;
-		if (Accept(lengthOrRightBracketToken, TokenType::RightBracket)) return Type{ type, nameToken->Word, 0 };
+		if (Accept(lengthOrRightBracketToken, TokenType::RightBracket)) return Type{ type, typeName->Full, 0 };
 		else if (Accept(lengthOrRightBracketToken, TokenType::Decimal)) {
 			ERROR << "Array's length must be integer.\n";
 			hasError = true;
@@ -442,12 +704,12 @@ namespace sam {
 		if (!Accept(rightBracketToken, TokenType::RightBracket)) {
 			ERROR << "Excepted ']' after array's length.\n";
 			return std::nullopt;
-		} else return Type{ type, nameToken->Word, length };
+		} else return Type{ type, typeName->Full, length };
 	}
 	bool Parser::ParseField() {
 		bool hasError = false;
 
-		const auto type = ParseType();
+		const auto type = ParseType(true);
 		if (!type) return true;
 		else if (type->ElementType == nullptr) {
 			ERROR << "Nonexistent type '" << type->ElementTypeName << "'.\n";
@@ -482,7 +744,8 @@ namespace sam {
 
 	int Parser::ParseInstructions() {
 		const Token* token = nullptr;
-		if (Accept(token, TokenType::StructKeyword)) return IgnoreStructure();
+		if (Accept(token, TokenType::ImportKeyword)) return IgnoreImport();
+		else if (Accept(token, TokenType::StructKeyword)) return IgnoreStructure();
 		else if (AcceptOr(token, TokenType::FuncKeyword, TokenType::ProcKeyword)) return IgnoreFunction();
 		else if (GetToken(m_Token + 1).Type == TokenType::Colon) {
 			m_CurrentFunction->Builder->AddLabel(GetToken(m_Token).Word);
@@ -580,7 +843,6 @@ namespace sam {
 	}
 	bool Parser::ParsePushInstruction() {
 		const auto number = ParseNumber();
-		const Token* structureToken = nullptr;
 		if (!std::holds_alternative<std::monostate>(number)) {
 			if (std::holds_alternative<std::int32_t>(number)) {
 				const auto inx = m_Result.ByteFile.AddIntConstant(static_cast<std::uint32_t>(std::get<std::int32_t>(number)));
@@ -598,18 +860,25 @@ namespace sam {
 				const auto inx = m_Result.ByteFile.AddDoubleConstant(std::get<double>(number));
 				m_CurrentFunction->Builder->Push(inx);
 			}
-		} else if (Accept(structureToken, TokenType::Identifier)) {
-			const auto structure = m_Result.FindStructure(structureToken->Word);
-			if (structure == m_Result.Structures.end()) {
-				ERROR << "Nonexistent structure name '" << structureToken->Word << "'.\n";
-				return true;
+			return false;
+		}
+
+		const auto name = ParseName("structure name", 1, true);
+		if (!name) return true;
+
+		const Structure* structure = nullptr;
+		const sgn::Type type = GetType(*name, &structure);
+		if (structure) {
+			if (structure->MappedIndex) {
+				m_CurrentFunction->Builder->Push(*structure->MappedIndex);
+			} else {
+				m_CurrentFunction->Builder->Push(structure->Index);
 			}
-			m_CurrentFunction->Builder->Push(structure->Index);
+			return false;
 		} else {
 			ERROR << "Excepted literal or structure name.\n";
 			return true;
 		}
-		return false;
 	}
 	bool Parser::ParseLoadInstruction() {
 		const Token* nameToken = nullptr;
@@ -660,7 +929,10 @@ namespace sam {
 		return false;
 	}
 	bool Parser::ParseFLeaInstruction() {
-		const auto field = GetField();
+		const auto fieldName = ParseName("field name", 2, false);
+		if (!fieldName) return true;
+
+		const auto field = GetField(*fieldName);
 		if (!field) return true;
 
 		m_CurrentFunction->Builder->FLea(*field);
@@ -758,16 +1030,16 @@ namespace sam {
 		return false;
 	}
 	bool Parser::ParseCallInstruction() {
-		const Token* nameToken = nullptr;
-		if (!Accept(nameToken, TokenType::Identifier)) {
-			ERROR << "Excepted function or procedure name.\n";
-			return true;
+		const auto functionName = ParseName("function or procedure name", 1, false);
+		if (!functionName) return true;
+
+		const auto function = GetFunction(*functionName);
+		if (std::holds_alternative<std::monostate>(function)) return true;
+		else if (std::holds_alternative<sgn::FunctionIndex>(function)) {
+			m_CurrentFunction->Builder->Call(std::get<sgn::FunctionIndex>(function));
+		} else if (std::holds_alternative<sgn::MappedFunctionIndex>(function)) {
+			m_CurrentFunction->Builder->Call(std::get<sgn::MappedFunctionIndex>(function));
 		}
-
-		const auto function = GetFunction(nameToken->Word);
-		if (!function) return true;
-
-		m_CurrentFunction->Builder->Call(*function);
 		return false;
 	}
 	bool Parser::ParseNewInstruction() {
@@ -855,44 +1127,69 @@ namespace sam {
 		return false;
 	}
 
-	std::optional<sgn::FieldIndex> Parser::GetField() {
-		const Token* structureNameToken = nullptr;
-		std::vector<Structure>::iterator structure;
-		if (!Accept(structureNameToken, TokenType::Identifier)) {
-			ERROR << "Excepted structure name.\n";
-			return std::nullopt;
-		} else if ((structure = m_Result.FindStructure(structureNameToken->Word)) == m_Result.Structures.end()) {
-			ERROR << "Nonexistent structure '" << structureNameToken->Word << "'.\n";
+	std::optional<sgn::FieldIndex> Parser::GetField(const Name& name) {
+		auto assembly = &m_Result;
+
+		if (!name.NameSpace.empty()) {
+			const auto dependency = m_Result.FindDependencyByNameSpace(name.NameSpace);
+			if (dependency == m_Result.Dependencies.end()) {
+				ERROR << "Nonexistent namespace '" << name.NameSpace << "'.\n";
+				return std::nullopt;
+			}
+
+			assembly = &dependency->Assembly;
+		}
+
+		const auto dot = name.Identifier.find('.');
+
+		const auto structureName = name.Identifier.substr(0, dot);
+		const auto structure = assembly->FindStructure(structureName);
+		if (structure == assembly->Structures.end()) {
+			ERROR << "Nonexistent structure '" << structureName << "'.\n";
 			return std::nullopt;
 		}
 
-		const Token* dotToken = nullptr;
-		if (!Accept(dotToken, TokenType::Dot)) {
-			ERROR << "Excepted dot after structure name.\n";
-			return std::nullopt;
-		}
-
-		const Token* fieldNameToken = nullptr;
-		std::vector<Field>::iterator field;
-		if (!Accept(fieldNameToken, TokenType::Identifier)) {
-			ERROR << "Excepted field name.\n";
-			return std::nullopt;
-		} else if ((field = structure->FindField(fieldNameToken->Word)) == structure->Fields.end()) {
-			ERROR << "Nonexistent field '" << structureNameToken->Word << '.' << fieldNameToken->Word << "'.\n";
+		const auto fieldName = name.Identifier.substr(dot + 1);
+		const auto field = structure->FindField(fieldName);
+		if (field == structure->Fields.end()) {
+			ERROR << "Nonexistent field '" << name.Identifier << "'.\n";
 			return std::nullopt;
 		}
 
 		return field->Index;
 	}
-	std::optional<sgn::FunctionIndex> Parser::GetFunction(const std::string& name) {
-		const auto iter = m_Result.FindFunction(name);
-		if (iter == m_Result.Functions.end()) {
-			ERROR << "Nonexistent function or procedure '" << name << "'.\n";
-			return std::nullopt;
-		} else if (name == "entrypoint") {
+	std::variant<std::monostate, sgn::FunctionIndex, sgn::MappedFunctionIndex> sam::Parser::GetFunction(const Name& name) {
+		auto assembly = &m_Result;
+		ExternModule* externModule = nullptr;
+
+		if (!name.NameSpace.empty()) {
+			const auto dependency = m_Result.FindDependencyByNameSpace(name.NameSpace);
+			if (dependency == m_Result.Dependencies.end()) {
+				ERROR << "Nonexistent namespace '" << name.NameSpace << "'.\n";
+				return std::monostate{};
+			}
+
+			externModule = &*dependency;
+			assembly = &dependency->Assembly;
+		}
+
+		const auto function = assembly->FindFunction(name.Identifier);
+		if (function == assembly->Functions.end()) {
+			ERROR << "Nonexistent function or procedure '" << name.Identifier << "'.\n";
+			return std::monostate{};
+		} else if (name.Identifier == "entrypoint") {
 			ERROR << "Noncallable procedure 'entrypoint'.\n";
-			return std::nullopt;
-		} else return iter->Index;
+			return std::monostate{};
+		}
+
+		if (externModule) {
+			if (!function->MappedIndex) {
+				function->MappedIndex = m_Result.ByteFile.Map(externModule->Index, *function->ExternIndex);
+			}
+			return *function->MappedIndex;
+		} else {
+			return function->Index;
+		}
 	}
 	std::optional<sgn::LabelIndex> Parser::GetLabel(const std::string& name) {
 		const auto iter = m_CurrentFunction->FindLabel(name);

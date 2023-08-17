@@ -10,5 +10,6 @@ namespace sam {
 		std::string Path;
 		sam::Assembly Assembly;
 		sgn::ExternModuleIndex Index;
+		std::string NameSpace;
 	};
 }

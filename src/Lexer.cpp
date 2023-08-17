@@ -18,7 +18,8 @@ namespace sam {
 	std::ostream& operator<<(std::ostream& stream, const Token& token) {
 		static constexpr std::string_view tokenTypes[] = {
 			"None", "NewLine",
-			"Identifier", "StructKeyword", "FuncKeyword", "ProcKeyword",
+			"Identifier",
+			"ImportKeyword", "AsKeyword", "StructKeyword", "FuncKeyword", "ProcKeyword",
 			"IntKeyword", "LongKeyword", "DoubleKeyword", "PointerKeyword", "GCPointerKeyword",
 			"BinInteger", "OctInteger", "DecInteger", "HexInteger", "Decimal",
 			"Plus", "Minus",
@@ -60,9 +61,6 @@ namespace sam {
 	void Lexer::Lex() {
 		while (std::getline(m_InputStream, m_Line) && ++m_LineNum) {
 			if (IgnoreComment()) continue;
-			else if (m_LineNum > 1) {
-				m_Result.emplace_back("\n", TokenType::NewLine, m_LineNum - 1);
-			}
 
 			for (m_Column = 0; m_Column < m_Line.size();) {
 				const char firstByte = m_Line[m_Column];
@@ -76,6 +74,8 @@ namespace sam {
 					LexIdentifier();
 				}
 			}
+
+			m_Result.emplace_back("\n", TokenType::NewLine, m_LineNum);
 		}
 	}
 	std::vector<Token> Lexer::GetTokens() noexcept {
@@ -303,6 +303,8 @@ namespace sam {
 		m_Column += identifier.size();
 
 		static const std::unordered_map<std::string, TokenType> keywords = {
+			{ "import", TokenType::ImportKeyword },
+			{ "as", TokenType::AsKeyword },
 			{ "struct", TokenType::StructKeyword },
 			{ "func", TokenType::FuncKeyword },
 			{ "proc", TokenType::ProcKeyword },

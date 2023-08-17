@@ -18,6 +18,7 @@ namespace sam {
 		std::vector<Function> Functions;
 
 		std::vector<ExternModule>::iterator FindDependency(const std::string& path);
+		std::vector<ExternModule>::iterator FindDependencyByNameSpace(const std::string& nameSpace);
 		ExternModule& GetDependency(const std::string& path);
 		bool HasDependency(const std::string& path);
 		std::vector<Structure>::iterator FindStructure(const std::string& name);
