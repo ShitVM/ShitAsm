@@ -29,4 +29,5 @@ $ ./ShitAsm <입력: ShitBC 어셈블리 경로> [명령줄 옵션...]
 ## 읽을거리
 - [예제](examples)
 - [문법](docs/Syntax.md)
+- [ShitAsm 확장 기능](docs/Extension.md)
 - [ShitVM 표준 라이브러리](docs/Standard%20Library.md)

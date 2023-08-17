@@ -124,6 +124,7 @@ namespace sam {
 		bool ParseAPushInstruction();
 		bool ParseANewInstruction();
 		bool ParseAGCNewInstruction();
+		bool ParseString32Statement(); // ShitAsm Extension
 
 		std::optional<sgn::FieldIndex> GetField(const Name& name);
 		std::variant<std::monostate, sgn::FunctionIndex, sgn::MappedFunctionIndex> GetFunction(const Name& name);

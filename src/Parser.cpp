@@ -844,6 +844,8 @@ namespace sam {
 		case "alea"_h: m_CurrentFunction->Builder->ALea(); break;
 		case "count"_h: m_CurrentFunction->Builder->Count(); break;
 
+		case "string32"_h: return ParseString32Statement();
+
 		default:
 			ERROR << "Unknown mnemonic.\n";
 			return true;
@@ -1134,6 +1136,76 @@ namespace sam {
 		}
 
 		m_CurrentFunction->Builder->AGCNew(m_Result.ByteFile.MakeArray(m_Result.ByteFile.GetTypeIndex(type->ElementType)));
+		return false;
+	}
+	bool Parser::ParseString32Statement() {
+		if (!m_Result.HasDependency("/std/string.sba")) {
+			ERROR << "Required to import \"/std/string.sba\" module.\n";
+			return true;
+		}
+
+		const Token* stringToken = nullptr;
+		if (!Accept(stringToken, TokenType::String)) {
+			ERROR << "Excepted string literal.\n";
+			return true;
+		}
+
+		const Token* toToken = nullptr;
+		if (!Accept(toToken, TokenType::Identifier) || std::get<std::string>(toToken->Data) != "to") {
+			ERROR << "Excepted 'to' after string literal.\n";
+			return true;
+		}
+
+		const Token* nameToken = nullptr;
+		if (!Accept(nameToken, TokenType::Identifier)) {
+			ERROR << "Excepted parameter or local variable name.\n";
+			return true;
+		}
+
+		auto var = GetLocalVaraible(nameToken->Word);
+		if (!var) {
+			var = m_CurrentFunction->Builder->AddLocalVariable();
+			m_CurrentFunction->LocalVariables.push_back(LocalVariable{ nameToken->Word, *var });
+		}
+
+		const auto module = m_Result.FindDependency("/std/string.sba");
+		const auto structure = module->Assembly.FindStructure("String32");
+		if (!structure->MappedIndex) {
+			structure->MappedIndex = m_Result.ByteFile.Map(module->Index, *structure->ExternIndex);
+		}
+
+		m_CurrentFunction->Builder->Push(*structure->MappedIndex);
+		m_CurrentFunction->Builder->Store(*var);
+
+		m_CurrentFunction->Builder->Lea(*var);
+		m_CurrentFunction->Builder->FLea(structure->Fields[0].Index);
+
+		const std::string& string = std::get<std::string>(stringToken->Data);
+		const std::uint64_t length = static_cast<std::uint64_t>(string.size());
+		const auto lengthConstant = m_Result.ByteFile.AddLongConstant(length);
+		m_CurrentFunction->Builder->Push(lengthConstant);
+		m_CurrentFunction->Builder->ANew(m_Result.ByteFile.MakeArray(m_Result.ByteFile.GetTypeIndex(svm::IntType)));
+		
+		for (std::uint64_t i = 0; i < length; ++i) {
+			m_CurrentFunction->Builder->Copy();
+			m_CurrentFunction->Builder->Push(m_Result.ByteFile.AddLongConstant(i));
+			m_CurrentFunction->Builder->ALea();
+			m_CurrentFunction->Builder->Push(m_Result.ByteFile.AddIntConstant(string[i]));
+			m_CurrentFunction->Builder->TStore();
+		}
+
+		m_CurrentFunction->Builder->TStore();
+
+		m_CurrentFunction->Builder->Lea(*var);
+		m_CurrentFunction->Builder->FLea(structure->Fields[1].Index);
+		m_CurrentFunction->Builder->Push(lengthConstant);
+		m_CurrentFunction->Builder->TStore();
+
+		m_CurrentFunction->Builder->Lea(*var);
+		m_CurrentFunction->Builder->FLea(structure->Fields[2].Index);
+		m_CurrentFunction->Builder->Push(lengthConstant);
+		m_CurrentFunction->Builder->TStore();
+
 		return false;
 	}
 

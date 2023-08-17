@@ -2,7 +2,6 @@ import "/std/array.sba" as array
 import "/std/io.sba" as io
 import "/std/string.sba" as str
 
-
 proc entrypoint:
 	call io.getStdin
 	store stdin
