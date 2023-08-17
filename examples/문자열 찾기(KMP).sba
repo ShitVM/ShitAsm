@@ -1349,7 +1349,7 @@ func createTable(string):
     load table
     push 0
     alea
-    push 18446744073709551615l ; -1
+    push -1l
     tstore
     
     push 1l
@@ -1524,7 +1524,7 @@ inBreak:
     jmp outLoop
 
 outFail:
-    push 4294967295 ; -1
+    push -1
     call io.getStdout
     call io.writeSignedInt
 

@@ -1388,7 +1388,7 @@ outNext:
     jmp outLoop
 
 outBreak:
-    push 4294967295 ; -1
+    push -1
     call io.getStdout
     call io.writeSignedInt
 

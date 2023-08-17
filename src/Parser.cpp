@@ -593,13 +593,13 @@ namespace sam {
 				if (value > 2147483648/*2^31*/) {
 					WARNING << "Overflowed integer literal.\n";
 				}
-				return static_cast<std::int32_t>(value);
+				return -static_cast<std::int32_t>(value);
 			} else if (std::holds_alternative<std::uint64_t>(literal)) {
 				const std::uint64_t value = std::get<std::uint64_t>(literal);
 				if (value > 922337236854775808/*2^63*/) {
 					WARNING << "Overflowed integer literal.\n";
 				}
-				return static_cast<std::int64_t>(value);
+				return -static_cast<std::int64_t>(value);
 			} else if (std::holds_alternative<double>(literal)) return -std::get<double>(literal);
 			else return std::monostate();
 		} else return std::visit([](auto value) -> std::variant<std::monostate, std::int32_t, std::uint32_t, std::int64_t, std::uint64_t, double> {
