@@ -5,7 +5,6 @@
 ## 목차
 - [참조 방법](#참조-방법)
 - [`array` 모듈](#array-모듈)
-	- [`getLength` 함수](#getlength-함수)
 	- [`copy` 프로시저](#copy-프로시저)
 - [`io` 모듈](#io-모듈)
 	- [`Stream` 구조체](#stream-구조체)
@@ -42,29 +41,6 @@ import "/std/array.sba" as io
 
 ## `array` 모듈
 이 모듈은 배열을 다룰 때 도움이 되는 함수를 제공합니다.
-
-### `getLength` 함수
-#### 원형
-```
-func getLength(arrayPtr)
-```
-
-#### 설명
-이 함수는 배열의 길이를 구할 때 사용합니다. 배열에 대한 포인터(`arrayPtr`)를 받아 해당 배열의 길이를 반환합니다.
-
-`arrayPtr`은 반드시 `pointer` 자료형이어야 합니다.
-
-함수의 반환값은 `long` 자료형입니다.
-
-#### 예제
-```
-push 10
-apush int[]
-store myArray
-
-lea myArray
-call getLength ; 10을 반환합니다.
-```
 
 ### `copy` 프로시저
 #### 원형
