@@ -1,0 +1,82 @@
+import "/std/array.sba" as array
+import "/std/io.sba" as io
+import "/std/string.sba" as str
+
+
+proc entrypoint:
+	call io.getStdin
+	store stdin
+
+	load stdin
+	call io.readString32
+	store input
+
+	load stdin
+	call io.readLong
+	store begin
+
+	load stdin
+	call io.readLong
+	store count
+
+	lea input
+	flea str.String32.length
+	tload
+	store length
+
+	load count
+	load length
+	cmp
+	jae break
+
+	load count
+	load begin
+	sub
+	load length
+	cmp
+	ja break
+
+	load count
+	apush int[]
+	store sub
+
+	load count
+	load begin
+	lea input
+	flea str.String32.data
+	tload
+	push 0l
+	lea sub
+	call array.copy
+
+	push str.String32
+	store output
+
+	lea output
+	flea str.String32.data
+	lea sub
+	tstore
+
+	lea output
+	flea str.String32.length
+	load count
+	tstore
+
+	lea output
+	flea str.String32.capacity
+	load count
+	tstore
+
+	lea output
+	call io.getStdout
+	call io.writeString32
+
+break:
+	ret
+
+; 입력 예
+; asdfqwer
+; 출력 예
+; fqwe
+; 결과 예
+; String32(????(int[4]{102, 113, 119, 101}), 4, 4)
