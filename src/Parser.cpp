@@ -16,8 +16,9 @@
 #include <utility>
 
 namespace sam {
-	Parser::Parser(std::string path, std::vector<Token> tokens, int depth) noexcept
-		: m_Path(std::move(path)), m_Tokens(std::move(tokens)), m_Depth(depth) {}
+	Parser::Parser(const std::vector<const char*>& importDirectories,
+		std::string path, std::vector<Token> tokens, int depth) noexcept
+		: m_ImportDirectories(importDirectories), m_Path(std::move(path)), m_Tokens(std::move(tokens)), m_Depth(depth) {}
 
 #define CURRENT_TOKEN (&GetToken(m_Token))
 
@@ -454,14 +455,23 @@ namespace sam {
 		} else if (path.find("std/") == 0) {
 			WARNING << "Use '/" << path << "' to import the standard library.\n";
 		} else if (resolvedPath[0] == '/') {
-			if (resolvedPath.find("std/")) {
-				realPath.erase(realPath.begin()); // TODO: 라이브러리 디렉터리에서 탐색하도록 변경
+			if (resolvedPath.find("std/") == 1) {
+				realPath.erase(realPath.begin());
 			} else {
+				for (const char* directory : m_ImportDirectories) {
+					const auto path = std::filesystem::path(directory) / resolvedPath.substr(1);
+					if (std::filesystem::exists(path)) {
+						realPath = std::filesystem::weakly_canonical(path).generic_string();
+						goto parse;
+					}
+				}
+
 				ERROR << "Failed to open '" << path << "'.\n";
 				return true;
 			}
 		}
 
+	parse:
 		std::ifstream inputStream(realPath);
 		if (!inputStream) {
 			ERROR << "Failed to open '" << path << "'.\n";
@@ -480,7 +490,7 @@ namespace sam {
 			}
 		}
 
-		Parser parser(path, lexer.GetTokens(), m_Depth + 1);
+		Parser parser(m_ImportDirectories, path, lexer.GetTokens(), m_Depth + 1);
 		parser.Parse();
 		if (parser.HasMessage()) {
 			m_ErrorStream << parser.GetMessages();

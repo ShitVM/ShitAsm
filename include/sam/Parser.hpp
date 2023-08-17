@@ -34,6 +34,7 @@ namespace sam {
 namespace sam {
 	class Parser final {
 	private:
+		const std::vector<const char*>& m_ImportDirectories;
 		std::string m_Path;
 		std::vector<Token> m_Tokens;
 		std::ostringstream m_ErrorStream;
@@ -50,7 +51,8 @@ namespace sam {
 		bool m_HasInfo = false;
 
 	public:
-		Parser(std::string path, std::vector<Token> tokens, int depth) noexcept;
+		Parser(const std::vector<const char*>& importDirectories,
+			std::string path, std::vector<Token> tokens, int depth) noexcept;
 		Parser(const Parser&) = delete;
 		~Parser() = default;
 

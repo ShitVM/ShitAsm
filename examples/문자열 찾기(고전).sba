@@ -1379,7 +1379,7 @@ inLoop:
 inBreak:
     load i
     call io.getStdout
-    call io.writeSignedInt
+    call io.writeLong
     ret
 
 outNext:
