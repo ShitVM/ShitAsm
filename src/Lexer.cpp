@@ -20,7 +20,7 @@ namespace sam {
 			"None", "NewLine",
 			"Identifier",
 			"ImportKeyword", "AsKeyword", "StructKeyword", "FuncKeyword", "ProcKeyword",
-			"IntKeyword", "LongKeyword", "DoubleKeyword", "PointerKeyword", "GCPointerKeyword",
+			"IntKeyword", "LongKeyword", "SingleKeyword", "DoubleKeyword", "PointerKeyword", "GCPointerKeyword",
 			"BinInteger", "OctInteger", "DecInteger", "HexInteger", "Decimal",
 			"Plus", "Minus",
 			"Character", "String",
@@ -311,6 +311,7 @@ namespace sam {
 
 			{ "int", TokenType::IntKeyword },
 			{ "long", TokenType::LongKeyword },
+			{ "single", TokenType::SingleKeyword },
 			{ "double", TokenType::DoubleKeyword },
 			{ "pointer", TokenType::PointerKeyword },
 			{ "gcpointer", TokenType::GCPointerKeyword },

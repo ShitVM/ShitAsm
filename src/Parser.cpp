@@ -577,7 +577,8 @@ namespace sam {
 		else if (m_CurrentStructure) return ParseField();
 		else return 2;
 	}
-	std::variant<std::monostate, std::int32_t, std::uint32_t, std::int64_t, std::uint64_t, double> Parser::ParseNumber() {
+	std::variant<std::monostate, std::int32_t, std::uint32_t, std::int64_t, std::uint64_t, float, double>
+		Parser::ParseNumber() {
 		const Token* maybeMinusToken = nullptr;
 		Accept(maybeMinusToken, TokenType::Minus);
 
@@ -593,10 +594,14 @@ namespace sam {
 			} else if (literalToken->Suffix == "l") return MakeNegative(value, maybeMinusToken);
 			else if (value <= std::numeric_limits<std::uint32_t>::max()) return MakeNegative(static_cast<std::uint32_t>(value), maybeMinusToken);
 			else return MakeNegative(value, maybeMinusToken);
-		} else if (Accept(literalToken, TokenType::Decimal)) return MakeNegative(std::get<double>(literalToken->Data), maybeMinusToken);
-		else return std::monostate();
+		} else if (Accept(literalToken, TokenType::Decimal)) {
+			const double value = std::get<double>(literalToken->Data);
+			if (literalToken->Suffix == "s") return MakeNegative(static_cast<float>(value), maybeMinusToken);
+			else return MakeNegative(value, maybeMinusToken);
+		} else return std::monostate();
 	}
-	std::variant<std::monostate, std::int32_t, std::uint32_t, std::int64_t, std::uint64_t, double> Parser::MakeNegative(std::variant<std::uint32_t, std::uint64_t, double> literal, bool isNegative) {
+	std::variant<std::monostate, std::int32_t, std::uint32_t, std::int64_t, std::uint64_t, float, double>
+		Parser::MakeNegative(std::variant<std::uint32_t, std::uint64_t, float, double> literal, bool isNegative) {
 		if (isNegative) {
 			if (std::holds_alternative<std::uint32_t>(literal)) {
 				const std::uint32_t value = std::get<std::uint32_t>(literal);
@@ -610,20 +615,23 @@ namespace sam {
 					WARNING << "Overflowed integer literal.\n";
 				}
 				return -static_cast<std::int64_t>(value);
-			} else if (std::holds_alternative<double>(literal)) return -std::get<double>(literal);
+			} else if (std::holds_alternative<float>(literal)) return -std::get<float>(literal);
+			else if (std::holds_alternative<double>(literal)) return -std::get<double>(literal);
 			else return std::monostate();
-		} else return std::visit([](auto value) -> std::variant<std::monostate, std::int32_t, std::uint32_t, std::int64_t, std::uint64_t, double> {
+		} else return std::visit([](auto value) -> std::variant<std::monostate, std::int32_t, std::uint32_t, std::int64_t, std::uint64_t, float, double> {
 			return value;
 		}, literal);
 	}
-	bool Parser::IsNegative(std::variant<std::monostate, std::int32_t, std::uint32_t, std::int64_t, std::uint64_t, double> value) {
-		if (std::holds_alternative<double>(value)) return std::get<double>(value) < 0;
+	bool Parser::IsNegative(std::variant<std::monostate, std::int32_t, std::uint32_t, std::int64_t, std::uint64_t, float, double> value) {
+		if (std::holds_alternative<float>(value)) return std::get<float>(value) < 0;
+		else if (std::holds_alternative<double>(value)) return std::get<double>(value) < 0;
 		else return std::holds_alternative<std::int32_t>(value) || std::holds_alternative<std::int64_t>(value);
 	}
 	sgn::Type Parser::GetType(const Name& name, const Structure** outStructure) {
 		static const std::unordered_map<std::string, sgn::Type> fundamental = {
 			{ "int", sgn::IntType },
 			{ "long", sgn::LongType },
+			{ "single", sgn::SingleType },
 			{ "double", sgn::DoubleType },
 			{ "pointer", sgn::PointerType },
 			{ "gcpointer", sgn::GCPointerType },
@@ -830,6 +838,7 @@ namespace sam {
 
 		case "toi"_h: m_CurrentFunction->Builder->ToI(); break;
 		case "tol"_h: m_CurrentFunction->Builder->ToL(); break;
+		case "tosi"_h: m_CurrentFunction->Builder->ToSi(); break;
 		case "tod"_h: m_CurrentFunction->Builder->ToD(); break;
 		case "top"_h: m_CurrentFunction->Builder->ToP(); break;
 
@@ -867,6 +876,9 @@ namespace sam {
 				m_CurrentFunction->Builder->Push(inx);
 			} else if (std::holds_alternative<std::uint64_t>(number)) {
 				const auto inx = m_Result.ByteFile.AddLongConstant(std::get<std::uint64_t>(number));
+				m_CurrentFunction->Builder->Push(inx);
+			} else if (std::holds_alternative<float>(number)) {
+				const auto inx = m_Result.ByteFile.AddSingleConstant(std::get<float>(number));
 				m_CurrentFunction->Builder->Push(inx);
 			} else {
 				const auto inx = m_Result.ByteFile.AddDoubleConstant(std::get<double>(number));

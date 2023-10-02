@@ -97,9 +97,9 @@ namespace sam {
 		bool ParseImport();
 
 		int ParseFields();
-		std::variant<std::monostate, std::int32_t, std::uint32_t, std::int64_t, std::uint64_t, double> ParseNumber();
-		std::variant<std::monostate, std::int32_t, std::uint32_t, std::int64_t, std::uint64_t, double> MakeNegative(std::variant<std::uint32_t, std::uint64_t, double> literal, bool isNegative);
-		bool IsNegative(std::variant<std::monostate, std::int32_t, std::uint32_t, std::int64_t, std::uint64_t, double> value);
+		std::variant<std::monostate, std::int32_t, std::uint32_t, std::int64_t, std::uint64_t, float, double> ParseNumber();
+		std::variant<std::monostate, std::int32_t, std::uint32_t, std::int64_t, std::uint64_t, float, double> MakeNegative(std::variant<std::uint32_t, std::uint64_t, float, double> literal, bool isNegative);
+		bool IsNegative(std::variant<std::monostate, std::int32_t, std::uint32_t, std::int64_t, std::uint64_t, float, double> value);
 		sgn::Type GetType(const Name& name, const Structure** outStructure = nullptr);
 		std::optional<Type> ParseType(bool isField = false);
 		bool ParseField();

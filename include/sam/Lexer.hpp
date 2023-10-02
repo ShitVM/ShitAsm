@@ -24,6 +24,7 @@ namespace sam {
 
 		IntKeyword,
 		LongKeyword,
+		SingleKeyword,
 		DoubleKeyword,
 		PointerKeyword,
 		GCPointerKeyword,

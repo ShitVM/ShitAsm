@@ -19,6 +19,7 @@ namespace sam {
 		switch (type) {
 		case TokenType::IntKeyword:
 		case TokenType::LongKeyword:
+		case TokenType::SingleKeyword:
 		case TokenType::DoubleKeyword:
 		case TokenType::PointerKeyword:
 		case TokenType::GCPointerKeyword:
